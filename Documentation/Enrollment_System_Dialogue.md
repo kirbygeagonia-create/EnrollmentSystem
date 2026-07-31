@@ -590,7 +590,7 @@ Every action in the system is auditable to a specific staff member in a specific
 ├─────────────────────────────────────────────────────────────┤
 │                    FINANCIAL                                 │
 │  feetypes ──→ charges ──→ studentassessments ──→ enrollments │
-│  scholarshipstypes ──→ studentscholarships                  │
+│  scholarshiptypes ──→ studentscholarships                  │
 │  payments ──→ enrollments                                   │
 ├─────────────────────────────────────────────────────────────┤
 │                    CLEARANCE                                 │

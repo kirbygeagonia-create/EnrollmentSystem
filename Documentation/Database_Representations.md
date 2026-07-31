@@ -127,7 +127,7 @@ erDiagram
     }
 
     %% ===== ADMISSION MODULE =====
-    academicschedule {
+    academicterms {
         int termId PK
         int academicYearId FK
         enum semester
@@ -295,7 +295,7 @@ erDiagram
         decimal waivedAmount
     }
 
-    scholarshipstypes {
+    scholarshiptypes {
         int scholarshipTypeId PK
         varchar scholarshipName
         enum coverageType
@@ -506,7 +506,7 @@ erDiagram
     enrollments ||--|| studentassessments : "assessed"
     studentassessments ||--o{ charges : "itemized as"
     feetypes ||--o{ charges : "categorized as"
-    scholarshipstypes ||--o{ studentscholarships : "awarded as"
+    scholarshiptypes ||--o{ studentscholarships : "awarded as"
     students ||--o{ studentscholarships : "receives"
     academicterms ||--o{ studentscholarships : "award term"
     enrollments ||--o{ payments : "paid as"
@@ -620,7 +620,7 @@ erDiagram
 | **studentrequirementsubmissions** | `requirementId` | admissionrequirements.requirementId | M:1 |
 | **students** | `religionId` | religions.religionId | M:1 |
 | **studentscholarships** | `studentId` | students.studentId | M:1 |
-| **studentscholarships** | `scholarshipTypeId` | scholarshipstypes.scholarshipTypeId | M:1 |
+| **studentscholarships** | `scholarshipTypeId` | scholarshiptypes.scholarshipTypeId | M:1 |
 | **studentscholarships** | `termId` | academicterms.termId | M:1 |
 | **studentscholarships** | `approvedBy` | staffusers.userId | M:1 |
 | **transferacademicrecords** | `studentId` | students.studentId | M:1 |
@@ -652,7 +652,7 @@ erDiagram
 | **0.5 — Entrance Exam** | Student takes entrance exam | courses (exam requirement), admissions | examresults, admissions (status update) | INSERT exam result, UPDATE admissionStatus on pass/fail |
 | **1 — Dept Evaluation** | Department reviews credentials | admissions, studentrequirementsubmissions, documents, admissionrequirements, curriculums | admissions (status→approved/rejected), documents (verifiedBy) | UPDATE admissionStatus, verify document submissions |
 | **2 — Clearance** | Check outstanding obligations | clearancerequirements, clearanceperiods, offices, students | studentclearances, clearanceapprovals | INSERT clearance + approval rows per requirement |
-| **3 — Assessment** | Compute tuition and fees | feetypes, scholarshipstypes, students, courses | studentassessments, charges (per fee), studentscholarships | INSERT assessment with computed amounts, create itemized charges |
+| **3 — Assessment** | Compute tuition and fees | feetypes, scholarshiptypes, students, courses | studentassessments, charges (per fee), studentscholarships | INSERT assessment with computed amounts, create itemized charges |
 | **4 — Cashier** | Payment processing | studentassessments (remainingBalance) | payments, studentassessments (balance update) | INSERT payment, UPDATE remainingBalance recalc |
 | **5 — Registrar Approval** | Final enrollment validation | admissions (status), enrolledsubjects, schedules, blocks, curriculums, curriculumsubjects | enrollments (status→enrolled), enrolledsubjects (status→confirmed), documentprintlog | UPDATE enrollmentStatus, confirm subject enrollment, print documents |
 | **6 — Registrar Final** | Print documents | enrollments, enrolledsubjects, subjects, schedules | documentprintlog, enrollmentworkflow, workflowsteps | INSERT document print log, initialize workflow tracking |
@@ -789,7 +789,7 @@ Phase 9:   [qualifying]    → INSERT examresults
 | BR16 | Enrolled subject status transitions: `proposed` → `confirmed` → `dropped` (no reversal) | enrolledsubjects (status) |
 | BR17 | Student type determines which phases apply (firstYear→skip clearance, continuing→skip admission) | enrollments (studentType) |
 | BR18 | Academic standing (`regular`/`irregular`) affects how subjects are assigned | enrollments (academicStanding) |
-| BR19 | Scholarship coverage cannot exceed 100% in total combined awards | scholarshipstypes (coveragePercent) |
+| BR19 | Scholarship coverage cannot exceed 100% in total combined awards | scholarshiptypes (coveragePercent) |
 | BR20 | A clearance period must be `open` before clearances can be processed | clearanceperiods (periodStatus) |
 
 ### Reference Data Rules
@@ -826,19 +826,19 @@ Phase 9:   [qualifying]    → INSERT examresults
 | staffusers | `username` | Staff portal login uniqueness |
 | payments | `orNumber` | Official receipt number traceability |
 | studentids | `qrCode` | QR code uniqueness for physical ID scanning |
+| **studentclearances** | **(studentId, clearancePeriodId)** | One clearance record per student per clearance period |
+| **studentscholarships** | **(studentId, scholarshipTypeId, termId)** | One scholarship award per type per student per term |
 
 ### AUTO_INCREMENT Primary Keys
 
-All 46 tables use `int` auto-increment primary keys. The current auto-increment values indicate data volume:
+45 of 46 tables use `int` auto-increment primary keys. The only exception is **`clinicrecords.clinicRecordId`** — it has no AUTO_INCREMENT and uses a manually-assigned PK (recommended to add AUTO_INCREMENT for consistency). The current auto-increment values indicate data volume:
 
 | Table | Next AI Value | Notes |
 |---|---|---|
 | enrollments | 30,001 | 30k enrollments served |
 | students | 29,549 | ~29.5k students in the system |
 | enrolledsubjects | 180,110 | 180k subject enrollments |
-| clinicrecords | — | No auto-increment (manual PK) |
-| charges | — | No auto-increment |
-| subjects | — | No auto-increment |
+| clinicrecords | — | No auto-increment (only table without it) |
 
 ### Composite Indexes
 
@@ -846,21 +846,9 @@ All 46 tables use `int` auto-increment primary keys. The current auto-increment 
 |---|---|---|---|
 | schedules | `idx_schedules_lookup` | sectionId, subjectId | Fast lookup of schedule by section + subject |
 
-### Explicit FOREIGN KEY Constraints
+### FOREIGN KEY Constraints
 
-Only a subset of FK relationships have actual database-level FOREIGN KEY constraints. The rest are enforced at the application level using INDEX-only references:
-
-| Constraint | Source | Target |
-|---|---|---|
-| `fk_blocks_courseid` | blocks.courseId | courses.courseId |
-| `fk_blocks_termid` | blocks.termId | academicterms.termId |
-| `fk_clinicrecords_enrollmentid` | clinicrecords.enrollmentId | enrollments.enrollmentId |
-| `fk_clinicrecords_clinicstaffid` | clinicrecords.clinicStaffId | staffusers.userId |
-| `fk_examresults_studentid` | examresults.studentId | students.studentId |
-| `fk_examresults_courseid` | examresults.courseId | courses.courseId |
-| `fk_examresults_termid` | examresults.termId | academicterms.termId |
-
-**Design Note:** Most FKs are implemented as INDEX-only (logical foreign keys) for performance and flexibility. The naming convention `fk_tablename_columnname` documents the intended relationship even where no physical constraint exists. Application-layer code enforces referential integrity for non-constrained relationships.
+All **78 FK relationships** documented in the relationship matrix (above) are enforced as actual database-level FOREIGN KEY constraints, all defined via `ALTER TABLE ADD CONSTRAINT`. This means referential integrity is guaranteed at the database engine level — no orphan child rows can exist.
 
 ---
 
