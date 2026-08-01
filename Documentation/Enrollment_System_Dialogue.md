@@ -141,9 +141,80 @@ If she had failed either stage, the `admissionStatus` in `admissions` would flip
 
 ---
 
-## Phase 1 — Academic Department Evaluation: "The Enrollment Form and Subject Load"
+## Phase 1 — Clearance Verification: "The Clearance Slip"
 
-Maria goes to the College of Computer Studies. All students — regardless of clearance status — line up to get the **Enrollment Form** first. She fills in her personal information, course, major, and student type.
+Clearance verification checks library books, lab equipment, and financial obligations. **This phase comes first — before the Academic Department Evaluation** — because the clearance slip's student copy is a mandatory requirement every student must hold when enrolling.
+
+### How clearance really works
+
+Clearance is issued **when a semester ends** — usually for continuing students, but every student's clearance is issued by their **college department**. Each student has **one clearance slip in record**, and it is **free**:
+
+1. At the end of the semester, the college department issues each student's clearance slip, listing what must be settled (library books, lab equipment, financial obligations).
+2. The student completes it within the clearance period — a **1–2 week window** (`clearanceperiods.clearanceStartDate` → `clearanceEndDate`, `periodStatus = 'open'`).
+3. Within those weeks, the student submits the completed slip to the **Registrar desk** — a *different* registrar staff member than the one in Phase 5 — and receives the **student copy**.
+4. If the weeks pass without submission, the **registrar will no longer entertain it** — the student must wait. When enrollment starts after the long break (or summer), students who did not complete and submit their clearance **do it first**, before going to their departments for enrollment and evaluation.
+
+The **student copy is mandatory** — it is submitted along at the Registrar phase (Phase 5), where the Registrar will not approve enrollment without it.
+
+**Important:** Clearance is **not part of the Enrollment Workflow Process form** — it is a separate, important requirement tracked in its own tables (`studentclearances`, `clearanceapprovals`), not on the 8-step workflow form.
+
+### What's printed on the clearance slip
+
+The clearance slip is a printed form. Each copy shows:
+
+- **Semester term** (e.g., First Semester)
+- **Academic school year** (e.g., 2025–2026)
+- **Full name** of the student
+- **Course and year** (e.g., BS Computer Science — 1st Year)
+
+It carries **no student ID field** — the printed form relies on the name and course/year for identification. Each student gets **exactly one copy in record, free**; the slip is tied to the clearance record (`studentclearances.studentClearanceId`). A **"date to be signed"** line is printed on the form — the date by which the student must have it signed and submitted.
+
+The slip's **"Received by"** section is printed with the **Registrar in-charge's signature over their printed name** when the student submits the completed slip at the Registrar desk during the clearance period. The registrar staff member who receives it is recorded in `studentclearances.receivedBy` (FK → `staffusers.userId`) with `receivedDate` — the new columns tracking desk receipt.
+
+The **student copy** is the copy the student keeps after submission — it is used for **verification at the Academic Evaluation (Phase 2)** and is a **mandatory submission at the Registrar phase (Phase 5)**.
+
+### The clearance module
+
+```
+clearanceperiods.periodId = 8 → termId = 1, periodStatus = 'open'
+clearancerequirements.requirementId = 1 → officeId = 7 (Library)
+clearancerequirements.requirementId = 2 → officeId = 12 (Science Lab)
+```
+
+Each clearance requirement belongs to an `offices` row. The 22 school offices each have predefined clearance items.
+
+For Maria, the system creates a `studentclearances` record:
+
+```
+studentClearanceId = 17500
+  → studentId = 15001
+  → clearancePeriodId = 8
+  → overallStatus = 'pending'
+  → receivedBy = 6 (Registrar in-charge who received the completed slip)
+  → receivedDate = '2026-02-20 09:30:00'
+```
+
+Then for each requirement, a `clearanceapprovals` row:
+
+```
+clearanceApprovalId = 376500
+  → studentClearanceId = 17500
+  → clearanceRequirementId = 1
+  → status = 'approved' (waived for first-year)
+  → approvedBy = 15
+```
+
+**Why three tables?** This design separates *what needs clearance* (`clearancerequirements`) from *who needs it* (`studentclearances`) from *the actual approval* (`clearanceapprovals`). It's a classic database pattern that allows different students to have different clearance statuses for the same requirement.
+
+### Lost clearance slip
+
+Each student has **one copy in record**, free. If the slip is lost, the student **pays ₱100** at Accounting — `feetypes.feeTypeId = 11` (`Clearance Slip Replacement`, flat) — then **shows the receipt to their college department**, which issues a new copy.
+
+---
+
+## Phase 2 — Academic Department Evaluation: "The Enrollment Form and Subject Load"
+
+Maria goes to the College of Computer Studies — with her clearance slip student copy already in hand from Phase 1. She lines up to get the **Enrollment Form** and fills in her personal information, course, major, and student type.
 
 ### The enrollment record
 
@@ -155,10 +226,49 @@ enrollments.enrollmentId = 15000
   → courseId = 5 (BS CompSci)
   → majorId = 2 (Software Development)
   → termId = 1
+  → yearLevel = 1
   → studentType = 'firstYear'
+  → enrollmentType = 'new'
   → enrollmentMode = 'online'
   → enrollmentStatus = 'pending'
 ```
+
+### The enrollment form (what's on it)
+
+The **Enrollment Form** is the printed form Maria fills at the department — the Academic Evaluation. It has two parts: the **demographic profile** and the **subject load**.
+
+**Part 1 — Complete demographic profile.** Every field must be filled before the form can be submitted:
+
+- **Name** (normalized: Last name, First name, Middle initial) and **suffix** (if any)
+- **Sex / gender**
+- **Date of birth** and **place of birth**
+- **Religion** and **citizenship**
+- **Civil status** (`students.civilStatus`: single / married / widowed / separated)
+- **Address** — full breakdown: lot/block, street name, purok/sitio, barangay, city/municipality, district, province, region, country (`addresses` table)
+- **Current address** — with a **"same as above" checkbox**; when ticked, the current address copies the home address. The system stores both addresses as separate `addresses` rows (`addressType = 'home'` and `'current'`), even when identical
+- **Telephone number** and **contact (mobile) number** (`students.telephoneNumber`, `students.contactNumber`)
+- **Email address** and **mailing address**
+- **Current semester completed** — the total number of semesters attended (`students.semestersCompleted`)
+- **Years in institution** (`students.yearsInInstitution`)
+- **Father's name and contact number**, **mother's name and contact number**, and **guardian's name and contact number in case of emergency** — stored in the `guardians` table (with the emergency-contact flag)
+
+**Part 2 — The subject load**, attached under the profile. The evaluator lists the subjects the student is allowed to take:
+
+```
+subject name   subject code   lecture units   lab units
+Introduction to Computing   IT101   3   0
+Computer Programming 1      IT102   2   1
+... (8 subjects total)
+```
+
+Also printed on the form: two **checkboxes — Regular or Irregular** (maps to `enrollments.academicStanding`), the **form issue date** (`enrollments.formIssuedDate` — today's date when the form is handed out), and the signature lines:
+
+- **Evaluator** (instructor of the college department) — signs at this phase
+- **Dean / Program Head** — signs at this phase (for Maria, `evaluatedBy = 12` is Dr. Reyes, the program head)
+- **Registrar** — signs later at Phase 5 (the signature line is on the form but is only filled when the Registrar approves)
+- **Student signature** and **signed date** (`enrollments.formSignedDate`)
+
+The student cannot submit the form — and the evaluator cannot process it — until every profile field is filled in and the subject load is attached.
 
 ### Retention Exam Gate (Board Courses Only)
 
@@ -210,7 +320,7 @@ The `status` column tracks the lifecycle: `proposed` (pre-registration) → `con
 
 ### Evaluator Signature and Registrar Approval
 
-The evaluators (instructors of the college department) sign the enrollment form with the subject load attached/written. The enrollment record is updated:
+The evaluators (instructors of the college department) sign the enrollment form with the subject load attached/written — the **Evaluator** and **Dean/Program Head** signature lines, plus the student's own signature with the signed date. The enrollment record is updated:
 
 ```sql
 UPDATE enrollments 
@@ -241,45 +351,6 @@ submissionId = 72590
 ```
 
 **Key relationship:** `admissionrequirements` is a *reference data* table — it lists what is required. `studentrequirementsubmissions` is the *transaction* table — it tracks whether each student actually submitted each requirement. `documents` holds the actual uploaded files.
-
----
-
-## Phase 2 — Clearance Verification: "No Outstanding Obligations"
-
-Clearance verification checks library books, lab equipment, and financial obligations. However, presenting clearance during Phase 1 (evaluation) is **not always required** — it depends per college/course. Clearance is **mandatory** at the Registrar phase (Phase 5), where the Registrar will not approve enrollment without it.
-
-For continuing students, this phase is critical: BR8 requires that continuing students must have cleared obligations before enrollment. But Maria is a first-year — her clearance is typically straightforward.
-
-### The clearance module
-
-```
-clearanceperiods.periodId = 8 → termId = 1, periodStatus = 'open'
-clearancerequirements.requirementId = 1 → officeId = 7 (Library)
-clearancerequirements.requirementId = 2 → officeId = 12 (Science Lab)
-```
-
-Each clearance requirement belongs to an `offices` row. The 21 school offices each have predefined clearance items.
-
-For Maria, the system creates a `studentclearances` record:
-
-```
-studentClearanceId = 17500
-  → studentId = 15001
-  → clearancePeriodId = 8
-  → overallStatus = 'pending'
-```
-
-Then for each requirement, a `clearanceapprovals` row:
-
-```
-clearanceApprovalId = 376500
-  → studentClearanceId = 17500
-  → clearanceRequirementId = 1
-  → status = 'approved' (waived for first-year)
-  → approvedBy = 15
-```
-
-**Why three tables?** This design separates *what needs clearance* (`clearancerequirements`) from *who needs it* (`studentclearances`) from *the actual approval* (`clearanceapprovals`). It's a classic database pattern that allows different students to have different clearance statuses for the same requirement.
 
 ---
 
@@ -387,7 +458,20 @@ When the payment is recorded, the system checks `studentassessments.remainingBal
 
 ## Phase 5 — Registrar Approval: "Official Enrollment"
 
-The Registrar verifies that all prior phases are complete. This is a *validation gate* — no new data is created in the student's personal tables, but the system checks that the preconditions are met and the Registrar issues the official documents.
+The Registrar verifies that all prior phases are complete. This is a *validation gate* — the system checks that the preconditions are met, the student's data is **recorded or updated**, and the Registrar issues the official documents.
+
+**Mandatory requirement:** Maria submits her **clearance slip student copy** (obtained in Phase 1) here — the Registrar will not approve enrollment without it. Note this is a *different* registrar staff member than the one who received the completed clearance slip at the desk during Phase 1.
+
+### Recording vs. updating student data
+
+The Registrar first checks the subject load from the enrollment form, approves the subjects, then enrolls the student. Depending on the student type, the system either **records** or **updates** the student's data:
+
+- **First year** — the student's profile is *new*: `enrollmentType = 'new'`. The Registrar records the full student data (demographics, address, guardians) from the enrollment form.
+- **Transferee** — also a *new* enrollment: `enrollmentType = 'new'`. Previous school records are credited (`transferacademicrecords`, `creditedsubjects`).
+- **Continuing** — the student is *already in the system*: `enrollmentType = 'old'`. The Registrar **updates** the existing student data (address, contact numbers, semesters completed, years in institution).
+- **Shifter** — also an *old* enrollment: `enrollmentType = 'old'`. The student's existing data is updated with the new course.
+
+The rule is derived automatically: `firstYear` and `transferee` → `'new'`; `continuing` and `shifter` → `'old'`.
 
 ### The enrollment table
 
@@ -398,7 +482,9 @@ enrollments.enrollmentId = 15000
   → studentId = 15001
   → courseId = 5 (BS CompSci)
   → termId = 1
+  → yearLevel = 1
   → studentType = 'firstYear'
+  → enrollmentType = 'new'
   → academicStanding = 'regular'
   → enrollmentMode = 'online'
   → enrollmentStatus = 'pending' → 'enrolled'
@@ -458,6 +544,60 @@ documentprintlog.printLogId = 24000
 
 The `documentType` enum (`subjectLoad`, `classCard`, `certificate`) controls which format is generated. The `documentNumber` is a simple sequence per enrollment.
 
+### The Enrollment Certificate print
+
+The **Enrollment Certificate Form** ("Student Subject Load") is the official proof of enrollment — printed with the complete subject loads. What's printed:
+
+**Header:** the school logo, school name, address, and telephone number.
+
+**Student information (pre-filled from the system):**
+- Full name — **Last name, First name, Middle initial**
+- Course and year
+- Student ID (school ID number)
+- School year (academic year) and **semester**
+- **Type** — `new` or `old` (`enrollments.enrollmentType`), printed as "New" or "Old" student
+
+**The subject table** — one row per enrolled subject:
+
+```
+No.   Subject Code   Description             Lecture Units   Lab Units   Total
+1     IT101          Introduction to Computing    3             0          3
+2     IT102          Computer Programming 1       2             1          3
+...   (all subjects)
+                                          Total Units              24
+```
+
+**Below the table:**
+- **Date enrolled** (`enrollments.enrolledDate`)
+- **Evaluated by** — the printed name of the registrar evaluator. Every staff member has their own login account (`staffusers` — username/password) and signs in when processing; the evaluator's name is taken from their profile, so it's always correct
+- **Processed by** — the same name as Evaluated by: for the certificate, the registrar evaluator who evaluated the enrollment also processes the print
+- **Student Copy** indication — this print is the student's copy
+- The **"SEAIT ENROLLED"** stamp — applied by the printer as part of the print output
+
+Each certificate print is logged: `documentprintlog.documentType = 'certificate'`.
+
+### The Class Card print
+
+A **Class Card** is printed **per subject** for the semester. Each card shows:
+
+**Header:** the school logo, school name, address, telephone — plus **"Office of the Registrar"**, the title **"Class Card"**, the semester, and the academic/school year.
+
+**Student block:**
+- Last / First / Middle name
+- Course and year
+- Subject code, descriptive title, and **units** — the lecture and lab units **summed** (e.g., IT102 → 3 units)
+
+**The empty boxes** — filled in by the instructor during the term:
+- **Set** (the block the student belongs to — e.g., "Block A")
+- **Time** (class meeting time, from `schedulemeetings`)
+- **Day** (class meeting days)
+- **Grade** (final grade given at term end)
+- **Name and Signature of Instructor**, with **Date** — signed by the instructor when the card is used
+
+**Footer:** **Issued by** — the evaluator's printed name (the registrar evaluator) — and **Date** — when the card was processed/given.
+
+Each card print is logged: `documentprintlog.documentType = 'classCard'` (one log row per card).
+
 ---
 
 ## Phase 6 — Blocking and Scheduling: "The Block Assignment"
@@ -473,6 +613,17 @@ UPDATE enrolledsubjects
 SET blockId = 15, scheduleId = 450
 WHERE enrollmentId = 15000;
 ```
+
+### The Block and Schedule print
+
+The department also prints the **Block and Schedule** — the printed list of subjects with their meeting times, days, rooms, and instructors for the whole block (see `Documentation/Images/Class Block and Schedule.jpg` for the reference layout). It shows each subject with:
+
+- Subject code and descriptive title
+- **Day** and **Time** (from `schedulemeetings` — a subject can meet on multiple days, e.g., Mon/Wed/Fri)
+- **Room** (`rooms` — e.g., Room 201)
+- **Instructor** (the staff user assigned to the schedule)
+
+This print is what tells the student where to go for each class — it complements the class card, which carries the same meeting info in per-subject boxes.
 
 ### The workflow tracking
 

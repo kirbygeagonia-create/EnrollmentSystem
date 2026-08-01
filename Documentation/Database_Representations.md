@@ -650,12 +650,12 @@ erDiagram
 |---|---|---|---|---|
 | **0 — Application** | Student applies for admission | students (dupe check), courses, academicterms | students, addresses, guardians, studenteducationalbackgrounds, educationalinstitutions, admissions | INSERT student profile, check uniqueness, create admission pending |
 | **0.5 — Entrance Exam** | Two-stage entrance exam for board courses: Guidance general exam → department verifies Guidance results → course-specific board-course exam | courses (exam requirement), admissions, examresults (Guidance results check) | examresults, admissions (status update) | INSERT exam result (general, then courseSpecific after verification), UPDATE admissionStatus on pass/fail |
-| **1 — Dept Evaluation** | Department reviews credentials; board-course continuing students take Retention Exam before the enrollment form; evaluation by student type (credit transfer, regular/irregular); evaluator signs form + subject load | admissions, studentrequirementsubmissions, documents, admissionrequirements, curriculums, curriculumsubjects, creditedsubjects, transferacademicrecords | admissions (status→approved/rejected), documents (verifiedBy), examresults (retention), enrollments, enrolledsubjects (proposed) | UPDATE admissionStatus, verify document submissions, INSERT retention exam result, create enrollment + proposed subject load |
-| **2 — Clearance** | Check outstanding obligations | clearancerequirements, clearanceperiods, offices, students | studentclearances, clearanceapprovals | INSERT clearance + approval rows per requirement |
+| **1 — Clearance** | Clearance slip issued by college department at end of prior semester (free, one copy in record); printed with semester term, academic school year, full name, course and year, and a date-to-be-signed line; 1–2 week window to complete and submit to the Registrar desk (different registrar staff than Phase 5) where the Registrar in-charge signs over their printed name ("Received by" recorded via `receivedBy`/`receivedDate`); student copy used for verification at Phase 2 and mandatory at Phase 5; **not part of the Enrollment Workflow Process form**; lost slip → ₱100 replacement at Accounting | clearancerequirements, clearanceperiods, offices, students, feetypes, staffusers | studentclearances, clearanceapprovals, payments (replacement fee if slip lost) | INSERT clearance + approval rows per requirement; check clearanceperiods window (`open`); record desk receipt (receivedBy/receivedDate); record replacement payment + reissue |
+| **2 — Dept Evaluation** | Department issues the Enrollment Form (demographic profile + subject load); profile fields must ALL be filled (name, sex, suffix, DOB, birthplace, religion, citizenship, civil status, full address incl. district/country, telephone + contact numbers, email, mailing address, current address with "same as above" checkbox, semesters completed, years in institution, father/mother/guardian contacts); Regular/Irregular checkboxes; board-course continuing students take Retention Exam before the form; evaluation by student type (credit transfer, regular/irregular); evaluator + Dean/Program Head sign, student signs with signed date; form issue date recorded | admissions, studentrequirementsubmissions, documents, admissionrequirements, curriculums, curriculumsubjects, creditedsubjects, transferacademicrecords, students, addresses, guardians, religions | admissions (status→approved/rejected), documents (verifiedBy), examresults (retention), enrollments (incl. civilStatus/telephoneNumber/semestersCompleted/yearsInInstitution + formIssuedDate/formSignedDate), enrolledsubjects (proposed), addresses (home/current incl. district/country), guardians | UPDATE admissionStatus, verify document submissions, INSERT retention exam result, create enrollment + proposed subject load, capture full profile from the form |
 | **3 — Assessment** | Compute tuition and fees | feetypes, scholarshiptypes, students, courses | studentassessments, charges (per fee), studentscholarships | INSERT assessment with computed amounts, create itemized charges |
 | **4 — Accounting** | Payment processing (₱500 enrollment fee, receipt, workflow form signature) | studentassessments (remainingBalance) | payments, studentassessments (balance update), workflowsteps (sign off) | INSERT payment (unique orNumber), UPDATE remainingBalance recalc |
-| **5 — Registrar Approval** | Final enrollment validation; Registrar issues Subject Load and Enrollment Certificate | admissions (status), enrolledsubjects, subjects, schedules, blocks, curriculums, curriculumsubjects | enrollments (status→enrolled), enrolledsubjects (status→confirmed), documentprintlog | UPDATE enrollmentStatus, confirm subject enrollment, INSERT document print log |
-| **6 — Blocking and Scheduling** | Academic Department assigns students to blocks; blocks carry fixed schedules, subjects, instructors, rooms | enrollments, enrolledsubjects, blocks, schedules, schedulemeetings, subjects | enrolledsubjects (blockId, scheduleId link), schedules, schedulemeetings | UPDATE block assignment, link schedules/meetings |
+| **5 — Registrar Approval** | Final enrollment validation; student data **recorded** (first-year/transferee → `enrollmentType='new'`) or **updated** (continuing/shifter → `'old'`); Registrar checks/approves subjects then enrolls; prints **Enrollment Certificate** (Student Subject Load: logo header, name Last-First-MI, course+year, student ID, school year, semester, Type new/old, subject table with lec/lab units and totals, date enrolled, Evaluated by/Processed by = registrar evaluator's printed name, Student Copy, SEAIT ENROLLED stamp) and **Class Cards** (per subject: Office of the Registrar header, semester, name, course+year, subject code/title/units (lec+lab summed), blank Set/Time/Day/Grade/Instructor boxes, Issued by evaluator + date) | admissions (status), enrolledsubjects, subjects, schedules, blocks, curriculums, curriculumsubjects, staffusers (evaluator name) | enrollments (status→enrolled, enrollmentType, registrarProcessedBy, enrolledDate), enrolledsubjects (status→confirmed), documentprintlog (subjectLoad + certificate + classCard) | UPDATE enrollmentStatus, record/update student data by type, confirm subject enrollment, INSERT document print log per print |
+| **6 — Blocking and Scheduling** | Academic Department assigns students to blocks; blocks carry fixed schedules, subjects, instructors, rooms; **Block and Schedule print** lists each subject with day, time, room, and instructor (see `Documentation/Images/Class Block and Schedule.jpg`) | enrollments, enrolledsubjects, blocks, schedules, schedulemeetings, subjects, rooms, staffusers | enrolledsubjects (blockId, scheduleId link), schedules, schedulemeetings | UPDATE block assignment, link schedules/meetings |
 | **7 — Clinic** | Physical examination (height, weight, BP), hard-copy assessments, PhilHealth registration, findings; workflow form signed | enrollments, enrollmentworkflow, staffusers | clinicrecords, workflowsteps (sign off), enrollmentworkflow (advance) | INSERT clinic record (incl. physical exam results), UPDATE workflow step + advance counter |
 | **8 — ID Request, Release and Validation** | Student ID request → card production → release + QR validation | enrollments, students | idrequests, studentids, workflowsteps | INSERT ID request + student ID, update workflow sign-off |
 
@@ -664,11 +664,11 @@ erDiagram
 ```
 Phase 0:   [student input] → INSERT students, addresses, guardians, admissions
 Phase 0.5: [exam result]   → INSERT examresults → UPDATE admissions.status
-Phase 1:   [review]        → UPDATE admissions.status
-Phase 2:   [clearance]     → INSERT studentclearances + clearanceapprovals
+Phase 1:   [clearance]     → INSERT studentclearances + clearanceapprovals → record desk receipt (receivedBy/receivedDate)
+Phase 2:   [review]        → UPDATE admissions.status → capture full enrollment form profile (students/addresses/guardians) + create enrollment
 Phase 3:   [assessment]    → INSERT studentassessments + charges + studentscholarships
 Phase 4:   [payment]       → INSERT payments → recalc assessment balance
-Phase 5:   [register]      → UPDATE enrollments.status → confirm enrolledsubjects → INSERT documentprintlog
+Phase 5:   [register]      → UPDATE enrollments.status → record/update student data by type (enrollmentType new/old) → confirm enrolledsubjects → INSERT documentprintlog (subjectLoad, certificate, classCard)
 Phase 6:   [blocking]      → UPDATE enrolledsubjects (blockId/scheduleId link)
 Phase 7:   [clinic]        → INSERT clinicrecords → UPDATE workflowsteps
 Phase 8:   [ID]            → INSERT idrequests + studentids → UPDATE workflowsteps
@@ -719,7 +719,7 @@ Phase 8:   [ID]            → INSERT idrequests + studentids → UPDATE workflo
                                       religions                   15
                                       subjects                   203
                                       majors                      13
-                                      feetypes                    10
+                                      feetypes                    11
                                       gradescale                  10
                                       academicterms               18
                                       academicyears                6
@@ -771,24 +771,28 @@ Phase 8:   [ID]            → INSERT idrequests + studentids → UPDATE workflo
 | # | Rule | Phase | Tables |
 |---|---|---|---|
 | BR7 | First-year and transferee applicants **must** have an admission record before enrollment | 0→5 | admissions, enrollments |
-| BR8 | Continuing students **must** have cleared obligations before enrollment | 2→5 | studentclearances, clearanceapprovals |
+| BR8 | Continuing students **must** have cleared obligations before enrollment (clearance slip student copy mandatory at Phase 5) | 1→5 | studentclearances, clearanceapprovals |
 | BR9 | Entrance exam is required if `courses.requiresEntranceExam = 1` — two-stage for board courses: general exam (Guidance Office) then course-specific exam (department), which verifies the Guidance result first | 0.5 | courses, examresults |
-| BR10 | Board-course continuing students (2nd–5th year) must pass the **Retention Examination** (`examStage = 'retention'`) before receiving the enrollment form; gated by `courses.requiresRetentionExam = 1`; not part of the Enrollment Workflow Process form | 1 | courses, examresults, enrollments |
+| BR10 | Board-course continuing students (2nd–5th year) must pass the **Retention Examination** (`examStage = 'retention'`) before receiving the enrollment form; gated by `courses.requiresRetentionExam = 1`; not part of the Enrollment Workflow Process form | 2 | courses, examresults, enrollments |
 | BR11 | An assessment must exist before payment can be recorded | 3→4 | studentassessments, payments |
 | BR12 | Enrollment cannot be marked `enrolled` without passing through all prior phases | 5 | enrollments (status) |
 | BR13 | Workflow steps must be signed in order (`stepOrder`) | 5→8 | workflowsteps |
 | BR14 | An enrollment workflow advances one step at a time | 5→8 | enrollmentworkflow (currentStep) |
+| BR31 | Enrollment type is derived from student type: `firstYear`/`transferee` → `new`; `continuing`/`shifter` → `old` (record vs update student data at Phase 5) | 2→5 | enrollments (studentType, enrollmentType) |
+| BR32 | Every field on the Enrollment Form's demographic profile must be filled before the form can be submitted (name, sex, suffix, DOB, birthplace, religion, citizenship, civil status, address incl. district/country, telephone + contact numbers, email, mailing address, semesters completed, years in institution, father/mother/guardian contacts) | 2 | students, addresses, guardians |
 
 ### Data Integrity Rules
 
 | # | Rule | Tables |
 |---|---|---|
-| BR15 | A student can have at most one `home`, one `current`, and one `permanent` address per term | addresses (addressType) |
+| BR15 | A student can have at most one `home`, one `current`, and one `permanent` address per term; the "same as above" checkbox on the enrollment form stores the current address as a separate `current` row even when identical to `home` | addresses (addressType) |
 | BR16 | Enrolled subject status transitions: `proposed` → `confirmed` → `dropped` (no reversal) | enrolledsubjects (status) |
-| BR17 | Student type determines which phases apply (firstYear→skip clearance, continuing→skip admission) | enrollments (studentType) |
-| BR18 | Academic standing (`regular`/`irregular`) affects how subjects are assigned | enrollments (academicStanding) |
+| BR17 | Student type determines which phases apply (firstYear→skip clearance obligations (waived), continuing→skip admission) | enrollments (studentType) |
+| BR18 | Academic standing (`regular`/`irregular`) affects how subjects are assigned; marked via the Regular/Irregular checkboxes on the enrollment form | enrollments (academicStanding) |
 | BR19 | Scholarship coverage cannot exceed 100% in total combined awards | scholarshiptypes (coveragePercent) |
 | BR20 | A clearance period must be `open` before clearances can be processed | clearanceperiods (periodStatus) |
+| BR33 | A student receives exactly one clearance slip per clearance period, free; a lost slip costs ₱100 replacement (feeTypeId 11) before a new copy is issued | 1 | studentclearances, feetypes |
+| BR34 | The clearance slip's desk receipt is recorded with the receiving registrar staff member and timestamp (receivedBy/receivedDate) when the completed slip is submitted | 1 | studentclearances |
 
 ### Reference Data Rules
 
@@ -846,7 +850,7 @@ Phase 8:   [ID]            → INSERT idrequests + studentids → UPDATE workflo
 
 ### FOREIGN KEY Constraints
 
-All **78 FK relationships** documented in the relationship matrix (above) are enforced as actual database-level FOREIGN KEY constraints, all defined via `ALTER TABLE ADD CONSTRAINT`. This means referential integrity is guaranteed at the database engine level — no orphan child rows can exist.
+All **79 FK relationships** documented in the relationship matrix (above) are enforced as actual database-level FOREIGN KEY constraints, all defined via `ALTER TABLE ADD CONSTRAINT`. This means referential integrity is guaranteed at the database engine level — no orphan child rows can exist.
 
 ---
 
@@ -858,13 +862,20 @@ All **78 FK relationships** documented in the relationship matrix (above) are en
 | Jul 2026 | Added `schedulemeetings` table | Separated meeting times from schedule metadata (normalization) |
 | Jul 2026 | Renamed `sections` to `blocks` | Reflected that sections = blocking sections, not class sections |
 | Jul 2026 | Completed block rename: `sectionId`→`blockId`, `sectionName`→`blockName`, FK/index names updated | Column-level terminology aligned with `blocks` table name |
-| Jul 2026 | Added `retention` stage to `examresults.examStage` | Phase 1 board-course retention examination gate |
+| Jul 2026 | Added `retention` stage to `examresults.examStage` | Phase 2 board-course retention examination gate |
 | Jul 2026 | Removed Physical Examination from `admissionrequirements` | Physical exam moved to Phase 7 Clinic (`clinicrecords`) |
 | Jul 2026 | Added `School Grant (Free Tuition)` scholarship type | Free-tuition school — all college students are school scholars once enrolled |
 | Jul 2026 | Renamed office 2 to `Accounting` (was `Cashier`), added `ID Office` (officeId 22) | Office terminology matches school usage; Phase 8 ID office formalized |
 | Jul 2026 | Added `enrollmentworkflow` + `workflowsteps` | Physical office routing form tracking |
 | Jul 2026 | Added `studentids` table | Decoupled ID cards from ID requests (1 request = 1 card but cards have lifecycle) |
 
+| Jul 2026 | Added `Clearance Slip Replacement` fee type (feeTypeId 11, ₱100 flat) | Lost clearance slip reissue — paid at Accounting, receipt shown to college department |
+| Jul 2026 | Clearance moved to Phase 1 (before Dept Evaluation); clearance is **not** part of the Enrollment Workflow Process form | Real process: clearance slip issued at semester end, submitted to Registrar desk; student copy mandatory at Phase 5 |
+| Jul 2026 | `students` + `civilStatus` (enum single/married/widowed/separated, default single), `telephoneNumber`, `semestersCompleted`, `yearsInInstitution` | Enrollment Form demographic profile fields (Phase 2) |
+| Jul 2026 | `addresses` + `district`, `country` (default 'Philippines') | Full address breakdown printed on the Enrollment Form |
+| Jul 2026 | `enrollments` + `yearLevel` (default 1), `enrollmentType` (enum new/old, default old), `formIssuedDate`, `formSignedDate` | Certificate "Course and Year" + Type new/old print; form issue/sign tracking (Phase 2→5) |
+| Jul 2026 | `studentclearances` + `receivedBy` (FK → staffusers.userId), `receivedDate` | Records which Registrar in-charge received the completed clearance slip and when (Phase 1 desk receipt) |
+
 ---
 
-*Generated: July 2026 — Matches enrollment database schema (46 tables)*
+*Generated: August 2026 — Matches enrollment database schema (46 tables)*
