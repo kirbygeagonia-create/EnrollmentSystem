@@ -103,9 +103,11 @@ admissions ──M:1──→ academicterms
 
 ## Phase 0.5 — Entrance Exam: "The Gatekeeper"
 
-Maria's chosen course, BS Computer Science, requires an entrance exam (`courses.requiresEntranceExam = 1`). The system needs to record her exam outcome before proceeding.
+Maria's chosen course, BS Computer Science, is a board course (`courses.requiresEntranceExam = 1`). Only board courses require an entrance exam — non-board courses skip this phase entirely. The entrance exam is a **two-stage** process.
 
-### The examresults table
+### Stage 1 — General Entrance Exam (Guidance Office)
+
+Maria goes to the Guidance Office and takes the **general** entrance exam — a standardized test taken by all applicants to board courses. The Guidance Office records the result:
 
 ```
 examresults.examId = 4500
@@ -118,35 +120,105 @@ examresults.examId = 4500
   → examDate = '2026-02-15'
 ```
 
-If she had failed, the `admissionStatus` in `admissions` would flip to `rejected`, ending her journey here. But she passes.
+### Stage 2 — Course-Specific Exam (College Department)
 
-**What this tells us:** The `examresults` table separates *admission* from *examination* — a course can opt in to requiring exams independently of the admission flow. This decoupling means the school can add or remove exam requirements without changing the admission pipeline logic.
+Before Maria can take the department's course-specific exam, the College of Computer Studies **pulls the Guidance exam results** (`examresults` filtered by `studentId` + `courseId`, `examType = 'general'`) to verify she passed Stage 1. Only after verification does the department administer the **course-specific** board-course exam:
+
+```
+examresults.examId = 4501
+  → studentId = 15001
+  → courseId = 5 (BS CompSci)
+  → termId = 1
+  → examStage = 'entrance'
+  → examType = 'courseSpecific'
+  → examResult = 'pass'
+  → examDate = '2026-02-22'
+```
+
+If she had failed either stage, the `admissionStatus` in `admissions` would flip to `rejected`, ending her journey here. But she passes both.
+
+**What this tells us:** The `examresults` table separates *admission* from *examination* — a course can opt in to requiring exams independently of the admission flow. The `examStage = 'entrance'` is the same for both stages; `examType` distinguishes `general` (Guidance Office) from `courseSpecific` (college department). This decoupling means the school can add or remove exam requirements without changing the admission pipeline logic.
 
 ---
 
-## Phase 1 — Academic Department Evaluation: "The Dean Approves"
+## Phase 1 — Academic Department Evaluation: "The Enrollment Form and Subject Load"
 
-Maria's application moves to the College of Computer Studies. The Program Head reviews her credentials.
+Maria goes to the College of Computer Studies. All students — regardless of clearance status — line up to get the **Enrollment Form** first. She fills in her personal information, course, major, and student type.
 
-### Database operation
+### The enrollment record
 
-The admissions record is updated:
+The system creates Maria's enrollment record:
 
-```sql
-UPDATE admissions 
-SET admissionStatus = 'approved', evaluatedBy = 12, evaluatedDate = '2026-02-20'
-WHERE admissionId = 12000;
+```
+enrollments.enrollmentId = 15000
+  → studentId = 15001
+  → courseId = 5 (BS CompSci)
+  → majorId = 2 (Software Development)
+  → termId = 1
+  → studentType = 'firstYear'
+  → enrollmentMode = 'online'
+  → enrollmentStatus = 'pending'
 ```
 
-`evaluatedBy` references `staffusers.userId = 12` — that's Dr. Reyes, the program head. No new tables are created here; the existing `admissions` row transitions from `pending` → `approved`.
+### Retention Exam Gate (Board Courses Only)
 
-### What the system checks
+For **continuing** students (2nd/3rd/4th/5th year) of board courses, there is a critical gate **before** they can fill the enrollment form: the **Retention Examination**. This is a real written exam that tests what they learned the previous academic term. If they fail, they cannot proceed to enrollment. Maria is a first-year, so this does not apply to her — but for continuing board-course students, the retention exam is recorded as:
 
-Before approval, the system validates:
+```
+examresults.examId = 4560
+  → studentId = 15001
+  → courseId = 5
+  → termId = 1
+  → examStage = 'retention'
+  → examType = 'courseSpecific'
+  → examResult = 'pass'
+  → examDate = '2026-02-18'
+```
 
-1. **Does a curriculum exist for this course + academic year?** → `curriculums` table
-2. **Are there required admission documents?** → `admissionrequirements` × `studentrequirementsubmissions`
-3. **Have all required documents been submitted?** → `documents` table
+**Important:** The retention exam is **not** part of the Enrollment Workflow Process form — it depends on the course (usually board courses) and is administered by the college department before the enrollment form is even issued. Non-board courses skip this gate entirely.
+
+### Evaluation by Student Type
+
+With the enrollment form filled, the evaluators (instructors of the college department) review Maria's credentials. Evaluation differs by student type:
+
+- **Transferees and shifters:** Their previous subjects are **credited** — `creditedsubjects` and `transferacademicrecords` map old-school subjects to the current curriculum.
+- **Continuing students:** Their previous subject load/academic term is checked subject-by-subject against the curriculum to determine **regular** or **irregular** standing (`enrollments.academicStanding` = `'regular'` or `'irregular'` — marked on the enrollment form).
+- **First-years (like Maria):** No prior subjects to evaluate — she is automatically `regular`.
+
+### Subject Load from Curriculum
+
+The evaluator consults `curriculumsubjects` to determine Maria's first-semester subjects:
+
+```
+curriculumsubjects: curriculumId = 5, yearLevel = 1, semesterOffered = '1st'
+  → subjectId = 101 (Introduction to Computing)
+  → subjectId = 102 (Computer Programming 1)
+  → subjectId = 103 (Mathematics in the Modern World)
+  → ... (8 subjects total)
+```
+
+Each subject gets an `enrolledsubjects` row (initially `status = 'proposed'`):
+
+```
+enrolledSubjectId = 179500
+  → enrollmentId = 15000
+  → subjectId = 101
+  → blockId = 15 (Block A)
+  → scheduleId = 450
+  → status = 'proposed'
+```
+
+### Evaluator Signature and Registrar Approval
+
+The evaluators (instructors of the college department) sign the enrollment form with the subject load attached/written. The enrollment record is updated:
+
+```sql
+UPDATE enrollments 
+SET evaluatedBy = 12, academicStanding = 'regular'
+WHERE enrollmentId = 15000;
+```
+
+`evaluatedBy` references `staffusers.userId = 12` — that's Dr. Reyes, the program head. The enrollment form then goes to the **Registrar** phase for final approval of the subject load.
 
 ### Document submission
 
@@ -174,7 +246,9 @@ submissionId = 72590
 
 ## Phase 2 — Clearance Verification: "No Outstanding Obligations"
 
-For continuing students, this phase checks library books, lab equipment, and financial obligations. But Maria is a first-year — her clearance is typically straightforward.
+Clearance verification checks library books, lab equipment, and financial obligations. However, presenting clearance during Phase 1 (evaluation) is **not always required** — it depends per college/course. Clearance is **mandatory** at the Registrar phase (Phase 6), where the Registrar will not approve enrollment without it.
+
+For continuing students, this phase is critical: BR8 requires that continuing students must have cleared obligations before enrollment. But Maria is a first-year — her clearance is typically straightforward.
 
 ### The clearance module
 
@@ -209,42 +283,46 @@ clearanceApprovalId = 376500
 
 ---
 
-## Phase 3 — Scholarship / Financial Assessment: "Computing the Cost"
+## Phase 3 — Scholarship / Financial Assessment: "Free Tuition School"
 
-Maria applied for a 50% academic scholarship. The Scholarship Office evaluates her eligibility.
+This school provides **free tuition** to all college students. Once enrolled, every student automatically becomes a school scholar under the **School Grant** — a 100% full-tuition scholarship.
 
-### Tables involved
+### The School Grant
 
 ```
-scholarshiptypes.scholarshipTypeId = 1
-  → scholarshipName = 'Academic Scholar'
-  → coverageType = 'partial'
-  → coveragePercent = 50.00
+scholarshiptypes.scholarshipTypeId = 9
+  → scholarshipName = 'School Grant (Free Tuition)'
+  → coverageType = 'full'
+  → coveragePercent = 100.00
 ```
 
-If approved:
+For Maria, the system automatically awards this:
 
 ```
 studentscholarships.studentScholarshipId = 7500
   → studentId = 15001
-  → scholarshipTypeId = 1
+  → scholarshipTypeId = 9 (School Grant)
   → termId = 1
   → status = 'active'
   → approvedBy = 8
   → awardedBeforeEnrollment = 1
 ```
 
+### Outside Scholarships
+
+Continuing students and shifters are passed automatically by this step — the School Grant covers them. However, **first-years and transferees** may also apply for **outside scholarship grants** (e.g., government, private, or NGO scholarships) on top of the School Grant. The scholarship stacking rule **BR19** still applies: combined scholarship coverage cannot exceed 100%.
+
 ### The assessment
 
-The system calculates what Maria owes:
+The system still performs a formal tuition assessment — even though the School Grant covers it, the computation is recorded for audit and reporting:
 
 ```
 studentassessments.assessmentId = 29500
   → enrollmentId = 15000 (Maria's eventual enrollment)
   → totalAssessedAmount = 25000.00
-  → totalScholarshipCoverage = 12500.00 (50% reduction)
+  → totalScholarshipCoverage = 25000.00 (100% School Grant)
   → totalWaived = 500.00 (laboratory fee waiver)
-  → remainingBalance = 12000.00
+  → remainingBalance = 0.00
   → assessmentDate = '2026-02-25'
 ```
 
@@ -267,24 +345,36 @@ scholarship types ──→ studentscholarships (award) ──→ studentassessm
 
 ---
 
-## Phase 4 — Cashier: "Payment"
+## Phase 4 — Accounting: "Payment"
 
-With her remaining balance of ₱12,000, Maria goes to the Cashier's Office.
+Maria goes to the **Accounting Office**. She lines up, pays the usual enrollment fee of **₱500**, and receives a receipt. The Accounting staff signs her Enrollment Workflow Process form.
 
 ### The payments table
+
+Payments ARE recorded in the system — this is the official record; the receipt is the student's proof:
 
 ```
 payments.paymentId = 30200
   → enrollmentId = 15000
   → orNumber = 'OR-2026-45001' (UNIQUE — every OR is system-wide unique)
-  → amount = 12000.00
+  → amount = 500.00
   → paymentDate = '2026-03-01'
-  → paymentMode = 'online'
-  → processedBy = 5 (Cashier staff)
+  → paymentMode = 'cash'
+  → processedBy = 5 (Accounting staff)
   → paymentStatus = 'paid'
 ```
 
 The `orNumber` has a **UNIQUE constraint** — no two payments can share an OR number. This is a business rule enforced at the database level: every official receipt must be traceable to a single transaction.
+
+### Workflow signature
+
+After payment, the Accounting workflow step is signed:
+
+```sql
+UPDATE workflowsteps 
+SET stepStatus = 'completed', signedBy = 5, signedDate = NOW()
+WHERE workflowId = 30000 AND officeId = 3; -- Accounting Office
+```
 
 **The payment cascade:**
 
@@ -334,7 +424,7 @@ Each subject gets an `enrolledsubjects` row:
 enrolledSubjectId = 179500
   → enrollmentId = 15000
   → subjectId = 101
-  → sectionId = 15 (Section A)
+  → blockId = 15 (Block A)
   → scheduleId = 450
   → status = 'confirmed'
 ```
@@ -343,7 +433,7 @@ The `status` column tracks the lifecycle: `proposed` (pre-registration) → `con
 
 ### The schedule
 
-Each `enrolledsubjects` row is linked to a `schedule`, which links to a `room`, an `instructor` (staffuser), and a `section`. The actual meeting times are in `schedulemeetings`:
+Each `enrolledsubjects` row is linked to a `schedule`, which links to a `room`, an `instructor` (staffuser), and a `block`. The actual meeting times are in `schedulemeetings`:
 
 ```
 schedulemeetings.meetingId = 2000
@@ -357,9 +447,13 @@ A schedule can have multiple meetings (e.g., Monday/Wednesday/Friday). This is w
 
 ---
 
-## Phase 6 — Registrar Final: "Documents and Certificates"
+## Phase 6 — Registrar Final: "Documents, Certificates, and Blocks"
 
 The Registrar prints Maria's **Subject Load** (list of enrolled subjects) and **Enrollment Certificate**.
+
+### Blocks and Schedules
+
+Each block has fixed schedules, subjects, instructors, and rooms. Schedules are organized under blocks: `schedules.blockId` FK → `blocks.blockId`. Maria is assigned to Block A (`blocks.blockId = 15`, `blockName = 'Block A'`), which has a fixed set of subjects, meeting times, and rooms.
 
 ### Document print log
 
@@ -376,7 +470,7 @@ The `documentType` enum (`subjectLoad`, `classCard`, `certificate`) controls whi
 
 ### The workflow tracking
 
-At this point, the `enrollmentworkflow` system starts tracking Maria's progress through physical offices. This is a separate mechanism from the enrollment pipeline — it's for the *physical* routing form that Maria carries from office to office.
+The **Enrollment Workflow Process form** is given to Maria as a guide — every phase requires its signature as verification/proof of progress. This form IS tracked in the system:
 
 ```
 enrollmentworkflow.workflowId = 30000
@@ -393,23 +487,27 @@ workflowstep 2: officeId = 18 (CRim Dean)            → stepStatus = 'completed
 ...
 workflowstep 6: officeId = 1  (Registrar Office)     → stepStatus = 'completed'
 workflowstep 7: officeId = 11 (School Clinic)         → stepStatus = 'pending'
-workflowstep 8: officeId = ? (ID Office)              → stepStatus = 'pending'
+workflowstep 8: officeId = 22 (ID Office)            → stepStatus = 'pending'
 ```
 
 The `workflowsteps` table tracks which offices have **signed off** on Maria's physical enrollment form. `signedBy` records the staff user who signed, and `signedDate` timestamps it.
 
+**Safety net:** The `workflowStatus` column supports a `'lost'` status — if the paper form is lost, the system still has the full digital record of every step, every signature, and every timestamp. No data is ever truly lost.
+
 ---
 
-## Phase 7 — Clinic: "Health Check and PhilHealth"
+## Phase 7 — Clinic: "Physical Examination, Health Check, and PhilHealth"
 
 *This is where my memory was incomplete before. Here's what actually happens.*
 
 Maria goes to the School Clinic (officeId = 11). The clinic staff:
 
-1. Gives her hard-copy assessment forms to fill out
-2. Takes her height, weight, and blood pressure
+1. Conducts a **physical examination** — height, weight, blood pressure, and other vital signs
+2. Gives her hard-copy assessment forms to fill out (health history, medical conditions)
 3. Registers her for PhilHealth (separate government system, but the school records the reference number)
 4. Signs off on the enrollment workflow process form
+
+**Note:** The physical examination is NOT an admission requirement — it is done at the Clinic phase, not during admissions. It was moved here from the `admissionrequirements` table.
 
 ### The clinicrecords table
 
@@ -454,12 +552,12 @@ WHERE workflowId = 30000;
 enrollments ──1:1──→ clinicrecords (one clinic record per enrollment per term)
 clinicrecords ──M:1──→ staffusers (the clinic staff who administered)
 enrollmentworkflow ──1:M──→ workflowsteps
-workflowsteps ──M:1──→ offices (21 offices in the system)
+workflowsteps ──M:1──→ offices (22 offices in the system)
 ```
 
 ---
 
-## Phase 8 — ID Evaluation: "The Student ID"
+## Phase 8 — ID Request, Release and Validation: "The Student ID"
 
 Maria now needs her school ID. She goes to the ID Office, has her photo taken, and provides emergency contact details.
 
@@ -585,7 +683,7 @@ Every action in the system is auditable to a specific staff member in a specific
 ├─────────────────────────────────────────────────────────────┤
 │                    ENROLLMENT CORE                           │
 │  enrollments ──→ enrolledsubjects ──→ schedules, subjects    │
-│  blocks (sections) ──→ schedules ──→ schedulemeetings, rooms │
+│  blocks ──→ schedules ──→ schedulemeetings, rooms │
 │  creditedsubjects, transferacademicrecords                  │
 ├─────────────────────────────────────────────────────────────┤
 │                    FINANCIAL                                 │

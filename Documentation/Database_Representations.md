@@ -184,8 +184,8 @@ erDiagram
         int studentId FK
         int courseId FK
         int termId FK
-        enum examStage
-        enum examType
+        enum examStage (entrance, midCourseQualifying, retention)
+        enum examType (general = Guidance Office, courseSpecific = department)
         enum examResult
         date examDate
     }
@@ -208,17 +208,17 @@ erDiagram
     }
 
     blocks {
-        int sectionId PK
+        int blockId PK
         int courseId FK
         int termId FK
         int yearLevel
-        varchar sectionName
+        varchar blockName
         int maxStudents
     }
 
     schedules {
         int scheduleId PK
-        int sectionId FK
+        int blockId FK
         int subjectId FK
         int instructorId FK
         int roomId FK
@@ -243,7 +243,7 @@ erDiagram
         int enrolledSubjectId PK
         int enrollmentId FK
         int subjectId FK
-        int sectionId FK
+        int blockId FK
         int scheduleId FK
         decimal grade
         enum status
@@ -491,7 +491,7 @@ erDiagram
     admissions ||--o{ enrollments : "originates from"
     enrollments ||--o{ enrolledsubjects : "has subjects"
     subjects ||--o{ enrolledsubjects : "enrolled as"
-    blocks ||--o{ enrolledsubjects : "section assigned"
+    blocks ||--o{ enrolledsubjects : "block assigned"
     schedules ||--o{ enrolledsubjects : "schedule assigned"
     blocks ||--o{ schedules : "has schedule"
     subjects ||--o{ schedules : "scheduled"
@@ -583,7 +583,7 @@ erDiagram
 | **documents** | `verifiedBy` | staffusers.userId | M:1 |
 | **enrolledsubjects** | `enrollmentId` | enrollments.enrollmentId | M:1 |
 | **enrolledsubjects** | `subjectId` | subjects.subjectId | M:1 |
-| **enrolledsubjects** | `sectionId` | blocks.sectionId | M:1 |
+| **enrolledsubjects** | `blockId` | blocks.blockId | M:1 |
 | **enrolledsubjects** | `scheduleId` | schedules.scheduleId | M:1 |
 | **enrollments** | `studentId` | students.studentId | M:1 |
 | **enrollments** | `courseId` | courses.courseId | M:1 |
@@ -602,7 +602,7 @@ erDiagram
 | **payments** | `enrollmentId` | enrollments.enrollmentId | M:1 |
 | **payments** | `processedBy` | staffusers.userId | M:1 |
 | **schedulemeetings** | `scheduleId` | schedules.scheduleId | M:1 |
-| **schedules** | `sectionId` | blocks.sectionId | M:1 |
+| **schedules** | `blockId` | blocks.blockId | M:1 |
 | **schedules** | `subjectId` | subjects.subjectId | M:1 |
 | **schedules** | `instructorId` | staffusers.userId | M:1 |
 | **schedules** | `roomId` | rooms.roomId | M:1 |
@@ -649,15 +649,15 @@ erDiagram
 | Phase | Description | Tables Read | Tables Written | Key DB Operations |
 |---|---|---|---|---|
 | **0 — Application** | Student applies for admission | students (dupe check), courses, academicterms | students, addresses, guardians, studenteducationalbackgrounds, educationalinstitutions, admissions | INSERT student profile, check uniqueness, create admission pending |
-| **0.5 — Entrance Exam** | Student takes entrance exam | courses (exam requirement), admissions | examresults, admissions (status update) | INSERT exam result, UPDATE admissionStatus on pass/fail |
-| **1 — Dept Evaluation** | Department reviews credentials | admissions, studentrequirementsubmissions, documents, admissionrequirements, curriculums | admissions (status→approved/rejected), documents (verifiedBy) | UPDATE admissionStatus, verify document submissions |
+| **0.5 — Entrance Exam** | Two-stage entrance exam for board courses: Guidance general exam → department verifies Guidance results → course-specific board-course exam | courses (exam requirement), admissions, examresults (Guidance results check) | examresults, admissions (status update) | INSERT exam result (general, then courseSpecific after verification), UPDATE admissionStatus on pass/fail |
+| **1 — Dept Evaluation** | Department reviews credentials; board-course continuing students take Retention Exam before the enrollment form; evaluation by student type (credit transfer, regular/irregular); evaluator signs form + subject load | admissions, studentrequirementsubmissions, documents, admissionrequirements, curriculums, curriculumsubjects, creditedsubjects, transferacademicrecords | admissions (status→approved/rejected), documents (verifiedBy), examresults (retention), enrollments, enrolledsubjects (proposed) | UPDATE admissionStatus, verify document submissions, INSERT retention exam result, create enrollment + proposed subject load |
 | **2 — Clearance** | Check outstanding obligations | clearancerequirements, clearanceperiods, offices, students | studentclearances, clearanceapprovals | INSERT clearance + approval rows per requirement |
 | **3 — Assessment** | Compute tuition and fees | feetypes, scholarshiptypes, students, courses | studentassessments, charges (per fee), studentscholarships | INSERT assessment with computed amounts, create itemized charges |
-| **4 — Cashier** | Payment processing | studentassessments (remainingBalance) | payments, studentassessments (balance update) | INSERT payment, UPDATE remainingBalance recalc |
+| **4 — Accounting** | Payment processing (₱500 enrollment fee, receipt, workflow form signature) | studentassessments (remainingBalance) | payments, studentassessments (balance update), workflowsteps (sign off) | INSERT payment (unique orNumber), UPDATE remainingBalance recalc |
 | **5 — Registrar Approval** | Final enrollment validation | admissions (status), enrolledsubjects, schedules, blocks, curriculums, curriculumsubjects | enrollments (status→enrolled), enrolledsubjects (status→confirmed), documentprintlog | UPDATE enrollmentStatus, confirm subject enrollment, print documents |
 | **6 — Registrar Final** | Print documents | enrollments, enrolledsubjects, subjects, schedules | documentprintlog, enrollmentworkflow, workflowsteps | INSERT document print log, initialize workflow tracking |
-| **7 — Clinic** | Health check, PhilHealth | enrollments, enrollmentworkflow, staffusers | clinicrecords, workflowsteps (sign off), enrollmentworkflow (advance) | INSERT clinic record, UPDATE workflow step + advance counter |
-| **8 — ID Eval** | Student ID request & production | enrollments, students | idrequests, studentids, workflowsteps | INSERT ID request + student ID, update workflow sign-off |
+| **7 — Clinic** | Physical examination (height, weight, BP), hard-copy assessments, PhilHealth registration, findings; workflow form signed | enrollments, enrollmentworkflow, staffusers | clinicrecords, workflowsteps (sign off), enrollmentworkflow (advance) | INSERT clinic record (incl. physical exam results), UPDATE workflow step + advance counter |
+| **8 — ID Request, Release and Validation** | Student ID request → card production → release + QR validation | enrollments, students | idrequests, studentids, workflowsteps | INSERT ID request + student ID, update workflow sign-off |
 | **9 — Qualifying Exam** | Mid-course exam | courses (exam requirement), enrollments | examresults | INSERT exam result with midCourseQualifying stage |
 
 ### Data Flow Through Phases (Simplified)
@@ -709,13 +709,13 @@ Phase 9:   [qualifying]    → INSERT examresults
                                       schedulemeetings          2,389
                                       schedules                   796
                                       curriculumsubjects        1,199
-                                      blocks/sections             133
+                                      blocks                     133
                                       educationalinstitutions     89
                                       staffusers                  40
                                       rooms                       40
                                       curriculums                 25
                                       academicunits               25
-                                      offices                     21
+                                      offices                     22
                                       clearancerequirements       21
                                       clearanceperiods            16
                                       religions                   15
@@ -751,7 +751,7 @@ Phase 9:   [qualifying]    → INSERT examresults
 4. **students** has 29.5k rows, but **enrollments** has 30.1k — meaning some students enrolled multiple times (across terms).
 5. **clinicrecords** matches **enrollments** closely (29.9k vs 30.1k) — nearly every enrollment goes through the clinic.
 6. **creditedsubjects** has 0 rows — the transfer credit feature exists but hasn't been used yet.
-7. **blocks** has 133 sections — an average of ~22 students per section.
+7. **blocks** has 133 blocks — an average of ~22 students per block.
 
 ---
 
@@ -774,8 +774,9 @@ Phase 9:   [qualifying]    → INSERT examresults
 |---|---|---|---|
 | BR7 | First-year and transferee applicants **must** have an admission record before enrollment | 0→5 | admissions, enrollments |
 | BR8 | Continuing students **must** have cleared obligations before enrollment | 2→5 | studentclearances, clearanceapprovals |
-| BR9 | Entrance exam is required if `courses.requiresEntranceExam = 1` | 0.5 | courses, examresults |
+| BR9 | Entrance exam is required if `courses.requiresEntranceExam = 1` — two-stage for board courses: general exam (Guidance Office) then course-specific exam (department), which verifies the Guidance result first | 0.5 | courses, examresults |
 | BR10 | Qualifying exam is required if `courses.requiresQualifyingExam = 1` | 9 | courses, examresults |
+| BR10a | Board-course continuing students (2nd–5th year) must pass the **Retention Examination** (`examStage = 'retention'`) before receiving the enrollment form; not part of the Enrollment Workflow Process form | 1 | examresults, enrollments |
 | BR11 | An assessment must exist before payment can be recorded | 3→4 | studentassessments, payments |
 | BR12 | Enrollment cannot be marked `enrolled` without passing through all prior phases | 5 | enrollments (status) |
 | BR13 | Workflow steps must be signed in order (`stepOrder`) | 6→8 | workflowsteps |
@@ -844,7 +845,7 @@ Phase 9:   [qualifying]    → INSERT examresults
 
 | Table | Index Name | Columns | Purpose |
 |---|---|---|---|
-| schedules | `idx_schedules_lookup` | sectionId, subjectId | Fast lookup of schedule by section + subject |
+| schedules | `idx_schedules_lookup` | blockId, subjectId | Fast lookup of schedule by block + subject |
 
 ### FOREIGN KEY Constraints
 
@@ -859,6 +860,11 @@ All **78 FK relationships** documented in the relationship matrix (above) are en
 | Jul 2026 | Added `clinicrecords` table | Phase 7 — Clinic process formalized |
 | Jul 2026 | Added `schedulemeetings` table | Separated meeting times from schedule metadata (normalization) |
 | Jul 2026 | Renamed `sections` to `blocks` | Reflected that sections = blocking sections, not class sections |
+| Jul 2026 | Completed block rename: `sectionId`→`blockId`, `sectionName`→`blockName`, FK/index names updated | Column-level terminology aligned with `blocks` table name |
+| Jul 2026 | Added `retention` stage to `examresults.examStage` | Phase 1 board-course retention examination gate |
+| Jul 2026 | Removed Physical Examination from `admissionrequirements` | Physical exam moved to Phase 7 Clinic (`clinicrecords`) |
+| Jul 2026 | Added `School Grant (Free Tuition)` scholarship type | Free-tuition school — all college students are school scholars once enrolled |
+| Jul 2026 | Renamed office 2 to `Accounting` (was `Cashier`), added `ID Office` (officeId 22) | Office terminology matches school usage; Phase 8 ID office formalized |
 | Jul 2026 | Added `enrollmentworkflow` + `workflowsteps` | Physical office routing form tracking |
 | Jul 2026 | Added `studentids` table | Decoupled ID cards from ID requests (1 request = 1 card but cards have lifecycle) |
 

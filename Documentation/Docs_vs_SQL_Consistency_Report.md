@@ -4,7 +4,7 @@
 
 ## Verdict
 
-**Overall: ~99% consistent.** All 9 issues identified in the initial audit have been resolved. Both the live MySQL database and the SQL dump file now match the documentation, and vice versa.
+**Overall: ~99% consistent.** All 9 issues identified in the initial audit plus all 8 issues from the second-round audit (schema vs. real school process) have been resolved. Both the live MySQL database and the SQL dump file now match the documentation, and vice versa.
 
 ### What was fixed
 
@@ -20,6 +20,19 @@
 | 8 | Redundant indexes on `payments` + `schedules` | Live DB + SQL file | ✅ Dropped `idx_payments_or` (duplicates `uq_payments_ornumber`) and `fk_schedules_sectionid` (covered by `idx_schedules_lookup`) |
 | 9 | `admissions.evaluatedBy`/`evaluatedDate` and `enrollments.registrarProcessedBy` were NOT NULL | Live DB + SQL file | ✅ Changed to nullable (`DEFAULT NULL`) to reflect phased workflow where `pending` records exist before evaluator assignment |
 
+### Second-round audit (schema vs. real school process)
+
+| # | Issue | Location | Fix Applied |
+|---|---|---|---|
+| 10 | `blocks` table + relationships still named `sectionId`/`sectionName` — school calls them blocks | Live DB + SQL + all docs | ✅ Full rename: `sectionId`→`blockId`, `sectionName`→`blockName` (180 refs in SQL, 133 data rows "Section A"→"Block A"), FKs `fk_schedules_blockid`/`fk_enrolledsubjects_blockid` recreated, `idx_schedules_lookup` re-pointed to `blockId` |
+| 11 | `examresults.examStage` only had `entrance`/`midCourseQualifying` | Live DB + SQL + docs | ✅ Added `'retention'` stage — retention exam for board-course continuing students (2nd–5th yr), taken in Phase 1 *before* the enrollment form (not Phase 9) |
+| 12 | Entrance exam documented as single-stage | `Database_Representations.md` + dialogue doc + docx | ✅ Two-stage for board courses: Guidance general exam → Academic Department pulls & verifies Guidance result → course-specific exam (`examType` = `general`/`courseSpecific`) |
+| 13 | Physical Examination listed as an admission requirement | Live DB + SQL + docs | ✅ Removed requirement 8 + 8,993 `studentrequirementsubmissions` + 8,992 `documents` rows (cascade). Physical exam moved to Clinic (Phase 7) — added blood pressure + physical examination wording to Phase 7 |
+| 14 | No School Grant for the school's free-tuition program | Live DB + SQL + docs | ✅ Added `scholarshiptypes` row 9 "School Grant (Free Tuition)" (full, 100%) — every SEAIT student covered; outside grants stack up to the 100% cap |
+| 15 | Phase 4 office named "Cashier" | Live DB + SQL + docs | ✅ Renamed to **Accounting** (officeId 2) in DB, SQL, and all docs |
+| 16 | No ID Office row — Phase 8 workflow step referenced a wrong office | Live DB + SQL + docs | ✅ Added `offices` row 22 "ID Office"; Phase 8 retitled "ID Request, Release and Validation" (dialogue doc workflow step 8 → officeId 22) |
+| 17 | Phase 1 documented without the enrollment form flow | dialogue doc + docx | ✅ Documented: line up → get enrollment form → fill info → (board: retention exam gate first) → evaluation by type → evaluator signs + subject load → Registrar |
+
 ### What was verified correct (no changes needed)
 
 - All 46 table names and column lists match SQL ↔ docs
@@ -28,6 +41,7 @@
 - All enum values match across schema and docs
 - Row counts in `Database_Representations.md` §4 match dump AUTO_INCREMENT values
 - Narrative in dialogue doc is consistent with actual schema
+- Second round: 0 remaining `sectionId`/`sectionName` columns in DB or SQL (4 `blockId`/`blockName` columns present); 7 admission requirements; 9 scholarship types; 22 offices (2 = Accounting, 22 = ID Office); 133 blocks; `examresults.examStage` = `enum('entrance','midCourseQualifying','retention')`
 
 ### Current state
 
@@ -38,7 +52,7 @@
 | Indexes | ~128 (after removing 3 redundant ones) |
 | AUTO_INCREMENT PKs | 45 of 46 tables (`clinicrecords.clinicRecordId` is the only exception) |
 | UNIQUE constraints | 10 (6 single-column + 4 composite) |
-| Last schema sync | July 2026 — live DB and `enrollment.sql` are in agreement |
+| Last schema sync | July 2026 — live DB and `enrollment.sql` are in agreement (second-round process-alignment applied Aug 2026) |
 
 ### Real-world capacity
 
