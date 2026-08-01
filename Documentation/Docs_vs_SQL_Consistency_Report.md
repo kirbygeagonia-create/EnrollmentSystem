@@ -4,7 +4,7 @@
 
 ## Verdict
 
-**Overall: ~99% consistent.** All 9 issues identified in the initial audit plus all 8 issues from the second-round audit (schema vs. real school process) have been resolved. Both the live MySQL database and the SQL dump file now match the documentation, and vice versa.
+**Overall: ~99% consistent.** All 9 issues identified in the initial audit plus all 9 issues from the second-round audit (schema vs. real school process) have been resolved. Both the live MySQL database and the SQL dump file now match the documentation, and vice versa.
 
 ### What was fixed
 
