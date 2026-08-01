@@ -203,10 +203,10 @@ Each subject gets an `enrolledsubjects` row (initially `status = 'proposed'`):
 enrolledSubjectId = 179500
   → enrollmentId = 15000
   → subjectId = 101
-  → blockId = 15 (Block A)
-  → scheduleId = 450
   → status = 'proposed'
 ```
+
+The `status` column tracks the lifecycle: `proposed` (pre-registration) → `confirmed` (official) → `dropped` (if the student drops). The block and schedule pointers (`blockId`, `scheduleId`) are filled in later — during Phase 6 Blocking and Scheduling.
 
 ### Evaluator Signature and Registrar Approval
 
@@ -246,7 +246,7 @@ submissionId = 72590
 
 ## Phase 2 — Clearance Verification: "No Outstanding Obligations"
 
-Clearance verification checks library books, lab equipment, and financial obligations. However, presenting clearance during Phase 1 (evaluation) is **not always required** — it depends per college/course. Clearance is **mandatory** at the Registrar phase (Phase 6), where the Registrar will not approve enrollment without it.
+Clearance verification checks library books, lab equipment, and financial obligations. However, presenting clearance during Phase 1 (evaluation) is **not always required** — it depends per college/course. Clearance is **mandatory** at the Registrar phase (Phase 5), where the Registrar will not approve enrollment without it.
 
 For continuing students, this phase is critical: BR8 requires that continuing students must have cleared obligations before enrollment. But Maria is a first-year — her clearance is typically straightforward.
 
@@ -373,7 +373,7 @@ After payment, the Accounting workflow step is signed:
 ```sql
 UPDATE workflowsteps 
 SET stepStatus = 'completed', signedBy = 5, signedDate = NOW()
-WHERE workflowId = 30000 AND officeId = 3; -- Accounting Office
+WHERE workflowId = 30000 AND officeId = 2; -- Accounting Office
 ```
 
 **The payment cascade:**
@@ -387,7 +387,7 @@ When the payment is recorded, the system checks `studentassessments.remainingBal
 
 ## Phase 5 — Registrar Approval: "Official Enrollment"
 
-The Registrar verifies that all prior phases are complete. This is a *validation gate* — no new data is created in the student's personal tables, but the system checks that the preconditions are met.
+The Registrar verifies that all prior phases are complete. This is a *validation gate* — no new data is created in the student's personal tables, but the system checks that the preconditions are met and the Registrar issues the official documents.
 
 ### The enrollment table
 
@@ -424,8 +424,6 @@ Each subject gets an `enrolledsubjects` row:
 enrolledSubjectId = 179500
   → enrollmentId = 15000
   → subjectId = 101
-  → blockId = 15 (Block A)
-  → scheduleId = 450
   → status = 'confirmed'
 ```
 
@@ -445,17 +443,9 @@ schedulemeetings.meetingId = 2000
 
 A schedule can have multiple meetings (e.g., Monday/Wednesday/Friday). This is why meetings are in a separate table — **one-to-many** from `schedules` to `schedulemeetings`.
 
----
-
-## Phase 6 — Registrar Final: "Documents, Certificates, and Blocks"
-
-The Registrar prints Maria's **Subject Load** (list of enrolled subjects) and **Enrollment Certificate**.
-
-### Blocks and Schedules
-
-Each block has fixed schedules, subjects, instructors, and rooms. Schedules are organized under blocks: `schedules.blockId` FK → `blocks.blockId`. Maria is assigned to Block A (`blocks.blockId = 15`, `blockName = 'Block A'`), which has a fixed set of subjects, meeting times, and rooms.
-
 ### Document print log
+
+The Registrar prints Maria's **Subject Load** (list of enrolled subjects) and **Enrollment Certificate**, each print recorded in the system:
 
 ```
 documentprintlog.printLogId = 24000
@@ -468,6 +458,22 @@ documentprintlog.printLogId = 24000
 
 The `documentType` enum (`subjectLoad`, `classCard`, `certificate`) controls which format is generated. The `documentNumber` is a simple sequence per enrollment.
 
+---
+
+## Phase 6 — Blocking and Scheduling: "The Block Assignment"
+
+After the Registrar, the Academic Department assigns Maria to a **block** — a fixed group of students for her year level, course, and term.
+
+### Blocks and Schedules
+
+Each block has fixed schedules, subjects, instructors, and rooms. Schedules are organized under blocks: `schedules.blockId` FK → `blocks.blockId`. Maria is assigned to Block A (`blocks.blockId = 15`, `blockName = 'Block A'`), which has a fixed set of subjects, meeting times, and rooms. The block and schedule pointers on her confirmed subjects are now filled in:
+
+```sql
+UPDATE enrolledsubjects 
+SET blockId = 15, scheduleId = 450
+WHERE enrollmentId = 15000;
+```
+
 ### The workflow tracking
 
 The **Enrollment Workflow Process form** is given to Maria as a guide — every phase requires its signature as verification/proof of progress. This form IS tracked in the system:
@@ -475,7 +481,7 @@ The **Enrollment Workflow Process form** is given to Maria as a guide — every 
 ```
 enrollmentworkflow.workflowId = 30000
   → enrollmentId = 15000
-  → currentStep = 6 (Registrar Final)
+  → currentStep = 6 (Blocking and Scheduling)
   → workflowStatus = 'inProgress'
 ```
 
@@ -485,7 +491,8 @@ Each workflow has `workflowsteps`:
 workflowstep 1: officeId = 17 (Business Admin Dept)  → stepStatus = 'completed'
 workflowstep 2: officeId = 18 (CRim Dean)            → stepStatus = 'completed'
 ...
-workflowstep 6: officeId = 1  (Registrar Office)     → stepStatus = 'completed'
+workflowstep 5: officeId = 1  (Registrar Office)     → stepStatus = 'completed'
+workflowstep 6: officeId = 17 (Business Admin Dept)  → stepStatus = 'completed' (blocking)
 workflowstep 7: officeId = 11 (School Clinic)         → stepStatus = 'pending'
 workflowstep 8: officeId = 22 (ID Office)            → stepStatus = 'pending'
 ```

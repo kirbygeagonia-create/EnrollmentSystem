@@ -654,8 +654,8 @@ erDiagram
 | **2 — Clearance** | Check outstanding obligations | clearancerequirements, clearanceperiods, offices, students | studentclearances, clearanceapprovals | INSERT clearance + approval rows per requirement |
 | **3 — Assessment** | Compute tuition and fees | feetypes, scholarshiptypes, students, courses | studentassessments, charges (per fee), studentscholarships | INSERT assessment with computed amounts, create itemized charges |
 | **4 — Accounting** | Payment processing (₱500 enrollment fee, receipt, workflow form signature) | studentassessments (remainingBalance) | payments, studentassessments (balance update), workflowsteps (sign off) | INSERT payment (unique orNumber), UPDATE remainingBalance recalc |
-| **5 — Registrar Approval** | Final enrollment validation | admissions (status), enrolledsubjects, schedules, blocks, curriculums, curriculumsubjects | enrollments (status→enrolled), enrolledsubjects (status→confirmed) | UPDATE enrollmentStatus, confirm subject enrollment |
-| **6 — Registrar Final** | Print documents | enrollments, enrolledsubjects, subjects, schedules | documentprintlog, enrollmentworkflow, workflowsteps | INSERT document print log, initialize workflow tracking |
+| **5 — Registrar Approval** | Final enrollment validation; Registrar issues Subject Load and Enrollment Certificate | admissions (status), enrolledsubjects, subjects, schedules, blocks, curriculums, curriculumsubjects | enrollments (status→enrolled), enrolledsubjects (status→confirmed), documentprintlog | UPDATE enrollmentStatus, confirm subject enrollment, INSERT document print log |
+| **6 — Blocking and Scheduling** | Academic Department assigns students to blocks; blocks carry fixed schedules, subjects, instructors, rooms | enrollments, enrolledsubjects, blocks, schedules, schedulemeetings, subjects | enrolledsubjects (blockId, scheduleId link), schedules, schedulemeetings | UPDATE block assignment, link schedules/meetings |
 | **7 — Clinic** | Physical examination (height, weight, BP), hard-copy assessments, PhilHealth registration, findings; workflow form signed | enrollments, enrollmentworkflow, staffusers | clinicrecords, workflowsteps (sign off), enrollmentworkflow (advance) | INSERT clinic record (incl. physical exam results), UPDATE workflow step + advance counter |
 | **8 — ID Request, Release and Validation** | Student ID request → card production → release + QR validation | enrollments, students | idrequests, studentids, workflowsteps | INSERT ID request + student ID, update workflow sign-off |
 
@@ -668,8 +668,8 @@ Phase 1:   [review]        → UPDATE admissions.status
 Phase 2:   [clearance]     → INSERT studentclearances + clearanceapprovals
 Phase 3:   [assessment]    → INSERT studentassessments + charges + studentscholarships
 Phase 4:   [payment]       → INSERT payments → recalc assessment balance
-Phase 5:   [register]      → UPDATE enrollments.status → INSERT enrolledsubjects
-Phase 6:   [documents]     → INSERT documentprintlog + enrollmentworkflow
+Phase 5:   [register]      → UPDATE enrollments.status → confirm enrolledsubjects → INSERT documentprintlog
+Phase 6:   [blocking]      → UPDATE enrolledsubjects (blockId/scheduleId link)
 Phase 7:   [clinic]        → INSERT clinicrecords → UPDATE workflowsteps
 Phase 8:   [ID]            → INSERT idrequests + studentids → UPDATE workflowsteps
 ```
@@ -776,8 +776,8 @@ Phase 8:   [ID]            → INSERT idrequests + studentids → UPDATE workflo
 | BR10 | Board-course continuing students (2nd–5th year) must pass the **Retention Examination** (`examStage = 'retention'`) before receiving the enrollment form; gated by `courses.requiresRetentionExam = 1`; not part of the Enrollment Workflow Process form | 1 | courses, examresults, enrollments |
 | BR11 | An assessment must exist before payment can be recorded | 3→4 | studentassessments, payments |
 | BR12 | Enrollment cannot be marked `enrolled` without passing through all prior phases | 5 | enrollments (status) |
-| BR13 | Workflow steps must be signed in order (`stepOrder`) | 6→8 | workflowsteps |
-| BR14 | An enrollment workflow advances one step at a time | 6→8 | enrollmentworkflow (currentStep) |
+| BR13 | Workflow steps must be signed in order (`stepOrder`) | 5→8 | workflowsteps |
+| BR14 | An enrollment workflow advances one step at a time | 5→8 | enrollmentworkflow (currentStep) |
 
 ### Data Integrity Rules
 

@@ -4,7 +4,7 @@
 
 ## Verdict
 
-**Overall: ~99% consistent.** All 9 issues identified in the initial audit plus all 9 issues from the second-round audit (schema vs. real school process) have been resolved. Both the live MySQL database and the SQL dump file now match the documentation, and vice versa.
+**Overall: ~99% consistent.** All 9 issues identified in the initial audit plus all 9 issues from the second-round audit (schema vs. real school process) plus the phase-split correction have been resolved. Both the live MySQL database and the SQL dump file now match the documentation, and vice versa.
 
 ### What was fixed
 
@@ -33,6 +33,7 @@
 | 16 | No ID Office row — Phase 8 workflow step referenced a wrong office | Live DB + SQL + docs | ✅ Added `offices` row 22 "ID Office"; Phase 8 retitled "ID Request, Release and Validation" (dialogue doc workflow step 8 → officeId 22) |
 | 17 | Phase 1 documented without the enrollment form flow | dialogue doc + docx | ✅ Documented: line up → get enrollment form → fill info → (board: retention exam gate first) → evaluation by type → evaluator signs + subject load → Registrar |
 | 18 | "Mid-Course Qualifying Exam" duplicated the Retention Exam — school has only Entrance + Retention exams | Live DB + SQL + all docs | ✅ Removed `midCourseQualifying` from `examresults.examStage` (now `enum('entrance','retention')`), renamed `courses.requiresQualifyingExam` → `requiresRetentionExam`, deleted the Post-Enrollment qualifying section from all docs |
+| 19 | Registrar and Blocking/Scheduling were merged into one phase ("Registrar Final: Documents, Certificates, and Blocks") — they are separate phases | `Database_Representations.md` + dialogue doc + docx | ✅ Split: **Phase 5 — Registrar Approval** validates enrollment, issues Subject Load + Enrollment Certificate (documentprintlog); **Phase 6 — Blocking and Scheduling** assigns students to blocks with fixed schedules (separate from Registrar). Order: Registrar → Blocking and Scheduling → Clinic → ID. Also fixed dialogue doc `workflowsteps` example (step 5 = Registrar officeId 1, step 6 = Academic Dept blocking) and Phase 4 Accounting workflow signature `officeId` 3→2 |
 
 ### What was verified correct (no changes needed)
 
@@ -43,6 +44,7 @@
 - Row counts in `Database_Representations.md` §4 match dump AUTO_INCREMENT values
 - Narrative in dialogue doc is consistent with actual schema
 - Second round: 0 remaining `sectionId`/`sectionName` columns in DB or SQL (4 `blockId`/`blockName` columns present); 7 admission requirements; 9 scholarship types; 22 offices (2 = Accounting, 22 = ID Office); 133 blocks; `examresults.examStage` = `enum('entrance','retention')`; `courses.requiresRetentionExam` (was `requiresQualifyingExam`)
+- Phase map: Registrar Approval (5) and Blocking and Scheduling (6) are distinct phases — Registrar issues Subject Load + Enrollment Certificate; Academic Department handles block assignment afterwards (Clinic 7 → ID 8)
 
 ### Current state
 
