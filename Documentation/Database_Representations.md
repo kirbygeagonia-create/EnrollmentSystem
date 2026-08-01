@@ -658,7 +658,7 @@ erDiagram
 | **6 — Registrar Final** | Print documents | enrollments, enrolledsubjects, subjects, schedules | documentprintlog, enrollmentworkflow, workflowsteps | INSERT document print log, initialize workflow tracking |
 | **7 — Clinic** | Physical examination (height, weight, BP), hard-copy assessments, PhilHealth registration, findings; workflow form signed | enrollments, enrollmentworkflow, staffusers | clinicrecords, workflowsteps (sign off), enrollmentworkflow (advance) | INSERT clinic record (incl. physical exam results), UPDATE workflow step + advance counter |
 | **8 — ID Request, Release and Validation** | Student ID request → card production → release + QR validation | enrollments, students | idrequests, studentids, workflowsteps | INSERT ID request + student ID, update workflow sign-off |
-| **9 — Qualifying Exam** | Mid-course exam | courses (exam requirement), enrollments | examresults | INSERT exam result with midCourseQualifying stage |
+| **Post-Enrollment — Qualifying Exam** *(not a numbered phase — not part of the enrollment flow)* | Mid-course exam, mid-semester, after enrollment is complete; no workflow form step | courses (exam requirement), enrollments | examresults | INSERT exam result with midCourseQualifying stage |
 
 ### Data Flow Through Phases (Simplified)
 
@@ -673,7 +673,9 @@ Phase 5:   [register]      → UPDATE enrollments.status → INSERT enrolledsubj
 Phase 6:   [documents]     → INSERT documentprintlog + enrollmentworkflow
 Phase 7:   [clinic]        → INSERT clinicrecords → UPDATE workflowsteps
 Phase 8:   [ID]            → INSERT idrequests + studentids → UPDATE workflowsteps
-Phase 9:   [qualifying]    → INSERT examresults
+
+Post-enrollment (not part of the flow):
+[qualifying exam] → INSERT examresults (midCourseQualifying)
 ```
 
 ---
@@ -775,7 +777,7 @@ Phase 9:   [qualifying]    → INSERT examresults
 | BR7 | First-year and transferee applicants **must** have an admission record before enrollment | 0→5 | admissions, enrollments |
 | BR8 | Continuing students **must** have cleared obligations before enrollment | 2→5 | studentclearances, clearanceapprovals |
 | BR9 | Entrance exam is required if `courses.requiresEntranceExam = 1` — two-stage for board courses: general exam (Guidance Office) then course-specific exam (department), which verifies the Guidance result first | 0.5 | courses, examresults |
-| BR10 | Qualifying exam is required if `courses.requiresQualifyingExam = 1` | 9 | courses, examresults |
+| BR10 | Qualifying exam is required if `courses.requiresQualifyingExam = 1` — **post-enrollment**, mid-semester; not part of the enrollment flow (Phases 0–8) and not on the workflow form | post-enrollment | courses, examresults |
 | BR10a | Board-course continuing students (2nd–5th year) must pass the **Retention Examination** (`examStage = 'retention'`) before receiving the enrollment form; not part of the Enrollment Workflow Process form | 1 | examresults, enrollments |
 | BR11 | An assessment must exist before payment can be recorded | 3→4 | studentassessments, payments |
 | BR12 | Enrollment cannot be marked `enrolled` without passing through all prior phases | 5 | enrollments (status) |

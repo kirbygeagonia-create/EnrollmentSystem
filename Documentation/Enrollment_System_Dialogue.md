@@ -606,9 +606,11 @@ The `idrequests → studentids` relationship is **one-to-one**: each request pro
 
 ---
 
-## Phase 9 — Mid-Course Qualifying Exam: "The Checkpoint"
+## Post-Enrollment — Mid-Course Qualifying Exam: "The Checkpoint" (Not Part of the Enrollment Flow)
 
-Some courses (like BS Computer Science) require a mid-course qualifying exam (`courses.requiresQualifyingExam = 1`). This happens mid-semester, around weeks 6-8.
+> **Positioning:** This is a *post-enrollment* exam, not one of the enrollment flow phases (0–8). It happens **mid-semester**, weeks 6–8, after the student is already enrolled — so it has **no step on the Enrollment Workflow Process form** (which only covers the 8 offices of the enrollment flow). It is documented here for completeness because it shares the `examresults` table.
+
+Some courses (like BS Computer Science) require a mid-course qualifying exam (`courses.requiresQualifyingExam = 1`). This happens mid-semester, around weeks 6-8, while the student is already enrolled.
 
 ### Database operation
 
@@ -626,6 +628,8 @@ examresults.examId = 4567
 ```
 
 **Key difference from entrance exam:** The entrance exam (`examStage = 'entrance'`) gates *admission* to the school. The qualifying exam gates *continuation* in the course — if Maria fails, she may be shifted to a different program but doesn't lose her enrollment entirely.
+
+**Why it's not a numbered phase:** The enrollment flow (Phases 0–8) is a single walk through the school's offices, tracked end-to-end by the Enrollment Workflow Process form. The qualifying exam happens *after* that walk is complete — the student is already enrolled, has their ID, and is attending classes. Calling it "Phase 9" implied it was another office in the same walk; it is not.
 
 ---
 
