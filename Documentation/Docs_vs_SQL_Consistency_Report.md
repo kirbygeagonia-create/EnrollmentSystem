@@ -32,6 +32,7 @@
 | 15 | Phase 4 office named "Cashier" | Live DB + SQL + docs | ✅ Renamed to **Accounting** (officeId 2) in DB, SQL, and all docs |
 | 16 | No ID Office row — Phase 8 workflow step referenced a wrong office | Live DB + SQL + docs | ✅ Added `offices` row 22 "ID Office"; Phase 8 retitled "ID Request, Release and Validation" (dialogue doc workflow step 8 → officeId 22) |
 | 17 | Phase 1 documented without the enrollment form flow | dialogue doc + docx | ✅ Documented: line up → get enrollment form → fill info → (board: retention exam gate first) → evaluation by type → evaluator signs + subject load → Registrar |
+| 18 | "Mid-Course Qualifying Exam" duplicated the Retention Exam — school has only Entrance + Retention exams | Live DB + SQL + all docs | ✅ Removed `midCourseQualifying` from `examresults.examStage` (now `enum('entrance','retention')`), renamed `courses.requiresQualifyingExam` → `requiresRetentionExam`, deleted the Post-Enrollment qualifying section from all docs |
 
 ### What was verified correct (no changes needed)
 
@@ -41,7 +42,7 @@
 - All enum values match across schema and docs
 - Row counts in `Database_Representations.md` §4 match dump AUTO_INCREMENT values
 - Narrative in dialogue doc is consistent with actual schema
-- Second round: 0 remaining `sectionId`/`sectionName` columns in DB or SQL (4 `blockId`/`blockName` columns present); 7 admission requirements; 9 scholarship types; 22 offices (2 = Accounting, 22 = ID Office); 133 blocks; `examresults.examStage` = `enum('entrance','midCourseQualifying','retention')`
+- Second round: 0 remaining `sectionId`/`sectionName` columns in DB or SQL (4 `blockId`/`blockName` columns present); 7 admission requirements; 9 scholarship types; 22 offices (2 = Accounting, 22 = ID Office); 133 blocks; `examresults.examStage` = `enum('entrance','retention')`; `courses.requiresRetentionExam` (was `requiresQualifyingExam`)
 
 ### Current state
 
