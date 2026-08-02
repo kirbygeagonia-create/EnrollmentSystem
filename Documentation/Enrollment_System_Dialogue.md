@@ -25,7 +25,7 @@ Think of this table as the canvas — everything else in the system exists *beca
 
 ## Phase 0 — Application: "Maria Decides to Enroll"
 
-It's February 2026. Maria opens the school's online admission portal and fills out the application form. She enters her personal details, her home address, her parent's contact numbers, and her educational history.
+It's February 2026. Maria goes to the school's admissions office and fills out the application form. She enters her personal details, her home address, her parent's contact numbers, and her educational history.
 
 ### What happens in the database
 
@@ -82,7 +82,6 @@ admissions.admissionId = 12000
   → termId = 1 (AY 2025-2026, 1st Semester)
   → courseId = 5 (BS Computer Science)
   → applicantType = 'firstYear'
-  → applicationMode = 'online'
   → admissionStatus = 'pending'
 ```
 
@@ -229,7 +228,6 @@ enrollments.enrollmentId = 15000
   → yearLevel = 1
   → studentType = 'firstYear'
   → enrollmentType = 'new'
-  → enrollmentMode = 'online'
   → enrollmentStatus = 'pending'
 ```
 
@@ -486,7 +484,6 @@ enrollments.enrollmentId = 15000
   → studentType = 'firstYear'
   → enrollmentType = 'new'
   → academicStanding = 'regular'
-  → enrollmentMode = 'online'
   → enrollmentStatus = 'pending' → 'enrolled'
   → registrarProcessedBy = 3
   → enrolledDate = '2026-03-01'

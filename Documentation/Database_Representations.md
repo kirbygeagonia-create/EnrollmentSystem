@@ -2,7 +2,22 @@
 
 > *Supplementary documentation for the Enrollment System database — ER diagrams, relationship matrices, phase mappings, data volumes, business rules, and constraints.*
 
----
+### Size by Module
+
+| Module | Total Rows | % of DB | Tables |
+|---|---|---|---|
+| **Clearance** | ~396,037 | 27.3% | clearanceapprovals, studentclearances, clearanceperiods, clearancerequirements |
+| **Enrollment Core** | ~210,109 | 14.5% | enrolledsubjects, enrollments, creditedsubjects |
+| **Financial** | ~202,776 | 14.0% | charges, payments, studentassessments, studentscholarships |
+| **Student Info** | ~187,536 | 12.9% | addresses, guardians, studenteducationalbackgrounds, students |
+| **Workflow** | ~174,541 | 12.0% | workflowsteps, enrollmentworkflow |
+| **Admission** | ~142,820 | 9.9% | studentrequirementsubmissions, documents, admissions, examresults |
+| **Clinic** | ~30,000 | 2.1% | clinicrecords |
+| **ID Management** | ~36,736 | 2.5% | idrequests, studentids |
+| **Academic Reference** | ~1,794 | 0.1% | curriculums, curriculumsubjects, subjects, courses, majors, academicunits, educationalinstitutions, blocks |
+| **System** | ~162 | 0.0% | staffusers, offices, rooms, feetypes, gradescale, religions, academicterms, academicyears |
+| **System Admin** | ~104 | 0.0% | roles, permissions, role_permissions, staff_roles, auditlogs, notifications, enrollmentstatushistory, settings |
+
 
 ## 1. Entity-Relationship Diagram
 
@@ -26,6 +41,10 @@ erDiagram
         varchar username UK
         varchar passwordHash
         enum status
+        enum civilStatus
+        varchar telephoneNumber
+        int semestersCompleted
+        int yearsInInstitution
     }
 
     addresses {
@@ -40,6 +59,8 @@ erDiagram
         varchar province
         varchar region
         varchar zipCode
+        varchar district
+        varchar country
     }
 
     guardians {
@@ -155,7 +176,6 @@ erDiagram
         int termId FK
         int courseId FK
         enum applicantType
-        enum applicationMode
         enum admissionStatus
         int evaluatedBy FK
         date evaluatedDate
@@ -199,12 +219,15 @@ erDiagram
         int termId FK
         int admissionId FK
         enum studentType
+        int yearLevel
         enum academicStanding
-        enum enrollmentMode
+        enum enrollmentType
         enum enrollmentStatus
         int evaluatedBy FK
         int registrarProcessedBy FK
         date enrolledDate
+        date formIssuedDate
+        date formSignedDate
     }
 
     blocks {
@@ -317,7 +340,7 @@ erDiagram
         int enrollmentId FK
         varchar orNumber UK
         decimal amount
-        date paymentDate
+        datetime paymentDate
         enum paymentMode
         int processedBy FK
         enum paymentStatus
@@ -343,6 +366,8 @@ erDiagram
         int clearancePeriodId FK
         enum overallStatus
         date extendedDeadline
+        int receivedBy FK
+        datetime receivedDate
     }
 
     clearanceapprovals {
@@ -454,6 +479,68 @@ erDiagram
         int documentNumber
     }
 
+    %% ===== SYSTEM ADMIN MODULE =====
+    roles {
+        int roleId PK
+        varchar roleName UK
+        varchar description
+    }
+
+    permissions {
+        int permissionId PK
+        varchar permissionName UK
+        varchar module
+    }
+
+    role_permissions {
+        int roleId FK
+        int permissionId FK
+    }
+
+    staff_roles {
+        int userId FK
+        int roleId FK
+    }
+
+    auditlogs {
+        int auditId PK
+        int userId FK
+        varchar action
+        varchar entityTable
+        int entityId
+        json oldValues
+        json newValues
+        varchar ipAddress
+        datetime createdAt
+    }
+
+    notifications {
+        bigint id PK
+        varchar type
+        varchar notifiableType
+        bigint notifiableId
+        json data
+        timestamp readAt
+        timestamp createdAt
+        timestamp updatedAt
+    }
+
+    enrollmentstatushistory {
+        int historyId PK
+        int enrollmentId FK
+        varchar fromStatus
+        varchar toStatus
+        int changedBy FK
+        varchar remarks
+        datetime changedAt
+    }
+
+    settings {
+        varchar settingKey PK
+        text settingValue
+        varchar description
+    }
+
     %% ===== RELATIONSHIPS =====
 
     %% Student Information
@@ -536,6 +623,18 @@ erDiagram
     students ||--o{ studentids : "has ID"
     staffusers ||--o{ studentids : "validated by"
 
+    %% Clearance receipt
+    staffusers }o--|| studentclearances : "received by"
+
+    %% System Admin
+    roles ||--o{ role_permissions : "granted as"
+    permissions ||--o{ role_permissions : "assigned to"
+    staffusers ||--o{ staff_roles : "holds"
+    roles ||--o{ staff_roles : "assigned to"
+    staffusers ||--o{ auditlogs : "logs"
+    enrollments ||--o{ enrollmentstatushistory : "status history"
+    staffusers }o--|| enrollmentstatushistory : "changed by"
+
     %% System
     staffusers }o--|| offices : "belongs to"
     staffusers }o--|| academicunits : "assigned to"
@@ -611,6 +710,14 @@ erDiagram
 | **studentassessments** | `enrollmentId` | enrollments.enrollmentId | 1:1 |
 | **studentclearances** | `studentId` | students.studentId | M:1 |
 | **studentclearances** | `clearancePeriodId` | clearanceperiods.clearancePeriodId | M:1 |
+| **studentclearances** | `receivedBy` | staffusers.userId | M:1 |
+| **auditlogs** | `userId` | staffusers.userId | M:1 |
+| **enrollmentstatushistory** | `enrollmentId` | enrollments.enrollmentId | M:1 |
+| **enrollmentstatushistory** | `changedBy` | staffusers.userId | M:1 |
+| **role_permissions** | `roleId` | roles.roleId | M:1 |
+| **role_permissions** | `permissionId` | permissions.permissionId | M:1 |
+| **staff_roles** | `userId` | staffusers.userId | M:1 |
+| **staff_roles** | `roleId` | roles.roleId | M:1 |
 | **studenteducationalbackgrounds** | `studentId` | students.studentId | M:1 |
 | **studenteducationalbackgrounds** | `institutionId` | educationalinstitutions.institutionId | M:1 |
 | **studentids** | `studentId` | students.studentId | M:1 |
@@ -634,13 +741,14 @@ erDiagram
 | Table | Referenced By (# FKs) | Key Role |
 |---|---|---|
 | **students** | 10 | Central hub — most tables link back to the student |
-| **enrollments** | 8 | The enrollment event everything connects to |
-| **staffusers** | 8 | Every action is auditable to a specific staff member |
-| **academicterms** | 5 | Time dimension for enrollment, exam, assessment, clearance |
-| **courses** | 5 | Academic structure reference |
+| **staffusers** | 15 | Every action is auditable to a specific staff member |
+| **enrollments** | 9 | The enrollment event everything connects to |
+| **academicterms** | 6 | Time dimension for enrollment, exam, assessment, clearance |
+| **courses** | 6 | Academic structure reference |
 | **subjects** | 5 | Subject catalog referenced by curriculum, enrollment, schedule |
 | **offices** | 3 | Workflow steps and clearance requirements |
-| **schedules** | 3 | Schedule meetings, enrolled subjects, instructor assignment |
+| **roles** | 2 | RBAC — role_permissions and staff_roles |
+| **schedules** | 2 | Schedule meetings, enrolled subjects |
 
 ---
 
@@ -681,72 +789,82 @@ Phase 8:   [ID]            → INSERT idrequests + studentids → UPDATE workflo
 ### Table Row Counts (sorted by size)
 
 ```
-████████████████████████████████████ clearanceapprovals      376,516
-███████████████████████████          enrolledsubjects         179,790
-████████████████████████             charges                 135,375
-███████████████████████              workflowsteps            144,475
-██████████████████                   studentrequirementsub.    72,590
-█████████████████                    documents                 71,446
-████████████████                     addresses                 59,514
-███████████████                      guardians                 55,309
-█████████████                        studenteducationalbg.    42,266
-████████████                         transferacademicrecords  38,913
-██████                                enrollments              30,125
-██████                                enrollmentworkflow       30,366
-██████                                payments                 30,253
-██████                                studentassessments       29,531
-██████                                students                 29,548
-██████                                clinicrecords            29,923
-█████                                 idrequests               21,042
-████                                  documentprintlog         24,174
-███                                   studentids               15,721
-███                                   studentclearances        17,492
-██                                    admissions               11,968
-██                                    studentscholarships       7,515
-                                      examresults               4,569
-                                      schedulemeetings          2,389
-                                      schedules                   796
-                                      curriculumsubjects        1,199
-                                      blocks                     133
-                                      educationalinstitutions     89
-                                      staffusers                  40
-                                      rooms                       40
-                                      curriculums                 25
-                                      academicunits               25
-                                      offices                     22
-                                      clearancerequirements       21
-                                      clearanceperiods            16
-                                      religions                   15
-                                      subjects                   203
-                                      majors                      13
-                                      feetypes                    11
-                                      gradescale                  10
-                                      academicterms               18
-                                      academicyears                6
-                                      creditedsubjects             0
+████████████████████████████████████████ clearanceapprovals              378,000
+███████████████████ enrolledsubjects                180,109
+███████████████ workflowsteps                   144,541
+██████████████ charges                         135,241
+███████ studentrequirementsub.           63,229
+███████ documents                        63,022
+██████ addresses                        60,000
+██████ guardians                        55,539
+████ studenteducationalbg.            41,997
+████ transferacademicrecords          38,702
+███ enrollments                      30,000
+███ enrollmentworkflow               30,000
+███ payments                         30,000
+███ studentassessments               30,000
+███ students                         30,000
+███ clinicrecords                    30,000
+███ documentprintlog                 25,178
+██ idrequests                       21,000
+██ studentclearances                18,000
+██ studentids                       15,736
+█ admissions                       12,000
+█ studentscholarships               7,535
+█ examresults                       4,569
+█ schedulemeetings                  2,389
+█ curriculumsubjects                1,199
+█ schedules                           796
+█ subjects                            203
+█ educationalinstitutions             179
+█ blocks                              133
+█ staff_roles                          47
+█ staffusers                           40
+█ rooms                                40
+█ role_permissions                     26
+█ curriculums                          25
+█ academicunits                        25
+█ offices                              22
+█ clearancerequirements                21
+█ academicterms                        18
+█ courses                              17
+█ clearanceperiods                     16
+█ religions                            15
+█ majors                               13
+█ roles                                13
+█ permissions                          13
+█ feetypes                             11
+█ gradescale                           10
+█ academicyears                         6
+█ settings                              5
+ creditedsubjects                      0
+ auditlogs                             0
+ notifications                         0
+ enrollmentstatushistory               0
 ```
 
 ### Size by Module
 
 | Module | Total Rows | % of DB | Tables |
 |---|---|---|---|
-| **Clearance** | ~394,008 | 33% | clearanceapprovals, studentclearances, clearanceperiods, clearancerequirements |
-| **Enrollment Core** | ~210,286 | 18% | enrolledsubjects, enrollments, creditedsubjects |
-| **Financial** | ~205,159 | 17% | charges, payments, studentassessments, studentscholarships |
-| **Student Info** | ~187,585 | 16% | addresses, guardians, studenteducationalbackgrounds, students |
-| **Workflow** | ~174,841 | 15% | workflowsteps, enrollmentworkflow |
-| **Admission** | ~85,028 | 7% | studentrequirementsubmissions, documents, admissions, examresults |
-| **Clinic** | ~29,923 | 2.5% | clinicrecords |
-| **ID Management** | ~36,763 | 3% | idrequests, studentids |
-| **Academic Reference** | ~1,720 | 0.15% | curriculums, curriculumsubjects, subjects, courses, majors, academicunits |
-| **System** | ~114 | 0.01% | staffusers, offices, rooms, etc. |
+| **Clearance** | ~396,037 | 27% | clearanceapprovals, studentclearances, clearanceperiods, clearancerequirements |
+| **Enrollment Core** | ~210,109 | 14% | enrolledsubjects, enrollments, creditedsubjects |
+| **Financial** | ~202,776 | 14% | charges, payments, studentassessments, studentscholarships |
+| **Student Info** | ~187,536 | 13% | addresses, guardians, studenteducationalbackgrounds, students |
+| **Workflow** | ~174,541 | 12% | workflowsteps, enrollmentworkflow |
+| **Admission** | ~142,820 | 10% | studentrequirementsubmissions, documents, admissions, examresults |
+| **Clinic** | ~30,000 | 2% | clinicrecords |
+| **ID Management** | ~36,736 | 3% | idrequests, studentids |
+| **Academic Reference** | ~1,794 | 0.1% | curriculums, curriculumsubjects, subjects, courses, majors, academicunits, educationalinstitutions, blocks |
+| **System** | ~162 | 0.0% | staffusers, offices, rooms, feetypes, gradescale, religions, academicterms, academicyears |
+| **System Admin** | ~104 | 0.0% | roles, permissions, role_permissions, staff_roles, auditlogs, notifications, enrollmentstatushistory, settings |
 
 ### Insights from Data Volume
 
-1. **clearanceapprovals dominates** (376k rows) — each student has many clearance requirements, each generating an approval row. With 17k studentclearances × ~21 requirements each = ~360k expected.
+1. **clearanceapprovals dominates** (378k rows) — each student has many clearance requirements, each generating an approval row. With 18k studentclearances × 21 requirements each = 378k.
 2. **enrolledsubjects** (180k) is the largest *operational* table — every subject per student per term is tracked here.
 3. **charges** (135k) grows fast — ~10 fee line items per assessment × 29.5k assessments.
-4. **students** has 29.5k rows, but **enrollments** has 30.1k — meaning some students enrolled multiple times (across terms).
+4. **students** (30k) and **enrollments** (30k) match — synthetic dataset is one enrollment per student.
 5. **clinicrecords** matches **enrollments** closely (29.9k vs 30.1k) — nearly every enrollment goes through the clinic.
 6. **creditedsubjects** has 0 rows — the transfer credit feature exists but hasn't been used yet.
 7. **blocks** has 133 blocks — an average of ~22 students per block.
@@ -829,18 +947,22 @@ Phase 8:   [ID]            → INSERT idrequests + studentids → UPDATE workflo
 | payments | `orNumber` | Official receipt number traceability |
 | studentids | `qrCode` | QR code uniqueness for physical ID scanning |
 | **studentclearances** | **(studentId, clearancePeriodId)** | One clearance record per student per clearance period |
-| **studentscholarships** | **(studentId, scholarshipTypeId, termId)** | One scholarship award per type per student per term |
+| studentscholarships | **(studentId, scholarshipTypeId, termId)** | One scholarship award per type per student per term |
+| roles | `roleName` | Role names are unique |
+| permissions | `permissionName` | Permission names are unique |
 
 ### AUTO_INCREMENT Primary Keys
 
-45 of 46 tables use `int` auto-increment primary keys. The only exception is **`clinicrecords.clinicRecordId`** — it has no AUTO_INCREMENT and uses a manually-assigned PK (recommended to add AUTO_INCREMENT for consistency). The current auto-increment values indicate data volume:
+53 of 54 tables use auto-increment primary keys — `clinicrecords.clinicRecordId` was fixed (Aug 2026) and now auto-increments like the rest. `settings` intentionally uses a string primary key (`settingKey`). Current auto-increment values indicate data volume:
 
 | Table | Next AI Value | Notes |
 |---|---|---|
 | enrollments | 30,001 | 30k enrollments served |
-| students | 29,549 | ~29.5k students in the system |
+| students | 30,001 | 30k students in the system |
 | enrolledsubjects | 180,110 | 180k subject enrollments |
-| clinicrecords | — | No auto-increment (only table without it) |
+| clinicrecords | 30,001 | AUTO_INCREMENT added Aug 2026 |
+| roles | 14 | 13 roles seeded |
+| permissions | 14 | 13 permissions seeded |
 
 ### Composite Indexes
 
@@ -850,7 +972,7 @@ Phase 8:   [ID]            → INSERT idrequests + studentids → UPDATE workflo
 
 ### FOREIGN KEY Constraints
 
-All **79 FK relationships** documented in the relationship matrix (above) are enforced as actual database-level FOREIGN KEY constraints, all defined via `ALTER TABLE ADD CONSTRAINT`. This means referential integrity is guaranteed at the database engine level — no orphan child rows can exist.
+All **86 FK relationships** documented in the relationship matrix (above) are enforced as actual database-level FOREIGN KEY constraints, all defined via `ALTER TABLE ADD CONSTRAINT`. This means referential integrity is guaranteed at the database engine level — no orphan child rows can exist.
 
 ---
 
@@ -875,7 +997,14 @@ All **79 FK relationships** documented in the relationship matrix (above) are en
 | Jul 2026 | `addresses` + `district`, `country` (default 'Philippines') | Full address breakdown printed on the Enrollment Form |
 | Jul 2026 | `enrollments` + `yearLevel` (default 1), `enrollmentType` (enum new/old, default old), `formIssuedDate`, `formSignedDate` | Certificate "Course and Year" + Type new/old print; form issue/sign tracking (Phase 2→5) |
 | Jul 2026 | `studentclearances` + `receivedBy` (FK → staffusers.userId), `receivedDate` | Records which Registrar in-charge received the completed clearance slip and when (Phase 1 desk receipt) |
+| Aug 2026 | Dropped `admissions.applicationMode` + `enrollments.enrollmentMode` (existing `'online'` rows converted to `'faceToFace'` first) | Online Enrollment dropped from scope — all applications processed on campus (Build Plan Stage 1.1) |
+| Aug 2026 | Extended `enrollments.enrollmentStatus` to `enum('pending','evaluated','assessed','paid','enrolled','dropped')` | Required by the Stage 2 state machine (BR12–BR14/BR16 enforcement) |
+| Aug 2026 | `clinicrecords.clinicRecordId` → AUTO_INCREMENT | Consistency with all other tables |
+| Aug 2026 | `payments.paymentDate` → `datetime` | Audit precision for payment timestamps |
+| Aug 2026 | Added RBAC tables: `roles`, `permissions`, `role_permissions`, `staff_roles` | Replaces reliance on the `staffusers.role` enum; a staff member can hold multiple roles |
+| Aug 2026 | Added `auditlogs`, `notifications`, `enrollmentstatushistory`, `settings` | Audit trail, in-app notifications, state-machine history, system settings |
+| Aug 2026 | Seeded 13 roles, 13 permissions, role/permission mappings, `staff_roles` for all 40 staff (by office + old role enum), and 5 settings | Build Plan Stage 1.4 — `staffusers.role` kept temporarily until RBAC is live |
 
 ---
 
-*Generated: August 2026 — Matches enrollment database schema (46 tables)*
+*Generated: August 2026 — Matches enrollment database schema (54 tables, 86 FK constraints)*

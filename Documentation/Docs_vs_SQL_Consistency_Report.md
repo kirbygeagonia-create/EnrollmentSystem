@@ -36,11 +36,12 @@
 | 19 | Registrar and Blocking/Scheduling were merged into one phase ("Registrar Final: Documents, Certificates, and Blocks") — they are separate phases | `Database_Representations.md` + dialogue doc + docx | ✅ Split: **Phase 5 — Registrar Approval** validates enrollment, issues Subject Load + Enrollment Certificate (documentprintlog); **Phase 6 — Blocking and Scheduling** assigns students to blocks with fixed schedules (separate from Registrar). Order: Registrar → Blocking and Scheduling → Clinic → ID. Also fixed dialogue doc `workflowsteps` example (step 5 = Registrar officeId 1, step 6 = Academic Dept blocking) and Phase 4 Accounting workflow signature `officeId` 3→2 |
 | 20 | Clearance documented after Dept Evaluation and as part of the Enrollment Workflow Process form — real process: clearance comes **first**, is **not** on the workflow form | `Database_Representations.md` + dialogue doc + docx + live DB + SQL | ✅ Clearance moved to **Phase 1** (issued by college dept at semester end, free, 1–2 week window, submit at Registrar desk → student copy); Dept Evaluation is now **Phase 2**. Added `feetypes` row 11 "Clearance Slip Replacement" (₱100, flat) for lost slips. Clearance marked as NOT part of the 8-step workflow form throughout |
 | 21 | Print forms (clearance slip, enrollment form, enrollment certificate, class cards, block/schedule) lacked DB fields: civil status, telephone, semesters completed, years in institution, address district/country, year level, enrollment Type (new/old), form issue/sign dates, clearance desk receipt; dump had stale/corrupted data blocks (examresults missing parens/examType, duplicate PK, stale `fk_courseexams_*` indexes, educationalinstitutions/EI refs, SEB/SRS/documents/TAR orphans) | Live DB + SQL + all docs | ✅ **Schema:** `students` +`civilStatus`/`telephoneNumber`/`semestersCompleted`/`yearsInInstitution`; `addresses` +`district`/`country`; `enrollments` +`yearLevel`/`enrollmentType`(new/old)/`formIssuedDate`/`formSignedDate`; `studentclearances` +`receivedBy`(FK)/`receivedDate` → **79 FKs**. Backfilled live: enrollmentType (12k new / 18k old), yearLevel from blocks, country='Philippines'. **Docs:** clearance slip print contents (Phase 1), full enrollment form composition + Regular/Irregular checkboxes + signatures (Phase 2), record-vs-update student data + Enrollment Certificate + Class Card print layouts (Phase 5), Block & Schedule print (Phase 6), new BR31–BR34, changelog rows. **Dump:** regenerated corrupted examresults/EI/SEB/SRS/documents/TAR data from live; removed duplicate examresults PK + stale index block; **full re-import into a scratch DB verified — 46/46 tables, 79/79 FKs, exact row counts match live** |
+| 22 | Build Plan Stage 1 (database finalization): online enrollment dropped, status state machine, RBAC/audit/admin tables, consistency fixes | Live DB + `enrollment.sql` + all docs | ✅ **Stage 1.1:** dropped `admissions.applicationMode` + `enrollments.enrollmentMode` (5,954 admissions + 14,973 enrollments converted `'online'`→`'faceToFace'` first). **Stage 1.2:** `enrollments.enrollmentStatus` → `enum('pending','evaluated','assessed','paid','enrolled','dropped')` (Stage 2 state machine); `clinicrecords.clinicRecordId` → AUTO_INCREMENT (was the only table without); `payments.paymentDate` → `datetime`. **Stage 1.3:** added `roles`, `permissions`, `role_permissions`, `staff_roles`, `auditlogs` (JSON old/new values), `notifications` (Laravel native), `enrollmentstatushistory`, `settings` → **86 FKs**. **Stage 1.4:** seeded 13 roles, 13 permissions, 26 role-permission mappings (SysAdmin = all), 47 staff_roles (by office + old role enum), 5 settings (currentTermId=18, schoolName, schoolAddress, schoolPhone, clearanceReplacementFee=100). **Docs:** RepMD ERD/matrix/heatmap/changelog updated (54 tables, 86 FKs), Confirmed Tables docx + EMS Complete docx + dialogue doc (online refs removed) synced, new BRs for admin module. **Dump:** regenerated fresh; **re-import into scratch DB verified — 54/54 tables, 86/86 FKs, exact row counts match live** |
 
 ### What was verified correct (no changes needed)
 
-- All 46 table names and column lists match SQL ↔ docs
-- All 79 FK relationships match SQL ↔ relationship matrix
+- All 54 table names and column lists match SQL ↔ docs
+- All 86 FK relationships match SQL ↔ relationship matrix
 - All unique constraints match business rules BR1–BR6 (plus the bonus composite unique indexes)
 - All enum values match across schema and docs
 - Row counts in `Database_Representations.md` §4 match dump AUTO_INCREMENT values
@@ -49,21 +50,22 @@
 - Phase map: Registrar Approval (5) and Blocking and Scheduling (6) are distinct phases — Registrar issues Subject Load + Enrollment Certificate; Academic Department handles block assignment afterwards (Clinic 7 → ID 8)
 - Third round: Clearance is Phase 1 (before Dept Evaluation = Phase 2), **not** part of the Enrollment Workflow Process form; 11 fee types (row 11 = Clearance Slip Replacement ₱100); 22 offices
 - Fourth round: **full dump re-import verified** — `enrollment.sql` imports cleanly into a fresh database with zero errors, 46/46 tables, 79/79 FKs, and exact row counts matching the live DB for all tables (previously the dump could NOT be imported due to pre-existing corruption in `examresults` and stale data blocks in `educationalinstitutions`, `studenteducationalbackgrounds`, `studentrequirementsubmissions`, `documents`, `transferacademicrecords`)
+- Fifth round (Build Plan Stage 1): **full dump re-import re-verified** — `enrollment.sql` regenerated after Stage 1 DDL/DML; imports cleanly, **54/54 tables, 86/86 FKs, exact row counts match live**; online-mode columns dropped with data converted; state machine enum extended; 8 new admin/audit tables seeded; Confirmed Tables docx ERD statements re-checked programmatically (86 statements ↔ 84 distinct FK pairs, dual `enrollments→staffusers` + `curriculumsubjects→subjects` FKs explain the difference)
 
 ### Current state
 
 | Metric | Value |
 |---|---|
-| Tables | **46** |
-| Explicit FK constraints | **79** (all enforced at DB level) |
-| Indexes | ~129 (after removing 3 redundant ones + adding `fk_studentclearances_receivedby`) |
-| AUTO_INCREMENT PKs | 45 of 46 tables (`clinicrecords.clinicRecordId` is the only exception) |
-| UNIQUE constraints | 10 (6 single-column + 4 composite) |
-| Last schema sync | Aug 2026 — live DB and `enrollment.sql` are in agreement; dump re-import verified clean (fourth-round print-form alignment) |
+| Tables | **54** |
+| Explicit FK constraints | **86** (all enforced at DB level) |
+| Indexes | ~136 (after removing 3 redundant ones + adding `fk_studentclearances_receivedby` + 7 Stage 1 FKs) |
+| AUTO_INCREMENT PKs | 53 of 54 tables (`settings.settingKey` is a natural string PK by design) |
+| UNIQUE constraints | 12 (6 single-column + 4 composite + `roles.roleName` + `permissions.permissionName`) |
+| Last schema sync | Aug 2026 — live DB and `enrollment.sql` are in agreement; dump re-import verified clean (fifth round — Build Plan Stage 1 finalization) |
 
 ### Real-world capacity
 
-**The 30k-student / 1.4M-row dataset is small for InnoDB.** Well-indexed lookups stay in single-digit milliseconds because B-tree index depth grows logarithmically. With 79 FKs and ~129 indexes, the schema is production-ready.
+**The 30k-student / 1.4M-row dataset is small for InnoDB.** Well-indexed lookups stay in single-digit milliseconds because B-tree index depth grows logarithmically. With 86 FKs and ~136 indexes, the schema is production-ready.
 
 Growth estimate for one school: ~30k students × 2–3 terms/year → ~60–90k enrollments/year. After 10 years, the largest tables reach ~10–15M rows — still routine territory for MySQL/MariaDB on a modest server.
 
