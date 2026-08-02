@@ -953,7 +953,7 @@ Phase 8:   [ID]            → INSERT idrequests + studentids → UPDATE workflo
 
 ### AUTO_INCREMENT Primary Keys
 
-53 of 54 tables use auto-increment primary keys — `clinicrecords.clinicRecordId` was fixed (Aug 2026) and now auto-increments like the rest. `settings` intentionally uses a string primary key (`settingKey`). Current auto-increment values indicate data volume:
+51 of 54 tables use auto-increment primary keys. `clinicrecords.clinicRecordId` was fixed (Aug 2026); a full audit found `subjects`, `studentscholarships`, `transferacademicrecords`, and `workflowsteps` also used manually-assigned PKs — all four were converted to AUTO_INCREMENT the same day. The only tables without an auto-increment PK are intentional: `settings` (string key `settingKey`), and the junction tables `role_permissions` / `staff_roles` (composite keys). Current auto-increment values indicate data volume:
 
 | Table | Next AI Value | Notes |
 |---|---|---|
@@ -961,6 +961,10 @@ Phase 8:   [ID]            → INSERT idrequests + studentids → UPDATE workflo
 | students | 30,001 | 30k students in the system |
 | enrolledsubjects | 180,110 | 180k subject enrollments |
 | clinicrecords | 30,001 | AUTO_INCREMENT added Aug 2026 |
+| subjects | 207 | AUTO_INCREMENT added Aug 2026 (manual PKs before) |
+| transferacademicrecords | 38,703 | AUTO_INCREMENT added Aug 2026 (manual PKs before) |
+| workflowsteps | 144,542 | AUTO_INCREMENT added Aug 2026 (manual PKs before) |
+| studentscholarships | 7,536 | AUTO_INCREMENT added Aug 2026 (manual PKs before) |
 | roles | 14 | 13 roles seeded |
 | permissions | 14 | 13 permissions seeded |
 
@@ -1000,6 +1004,7 @@ All **86 FK relationships** documented in the relationship matrix (above) are en
 | Aug 2026 | Dropped `admissions.applicationMode` + `enrollments.enrollmentMode` (existing `'online'` rows converted to `'faceToFace'` first) | Online Enrollment dropped from scope — all applications processed on campus (Build Plan Stage 1.1) |
 | Aug 2026 | Extended `enrollments.enrollmentStatus` to `enum('pending','evaluated','assessed','paid','enrolled','dropped')` | Required by the Stage 2 state machine (BR12–BR14/BR16 enforcement) |
 | Aug 2026 | `clinicrecords.clinicRecordId` → AUTO_INCREMENT | Consistency with all other tables |
+| Aug 2026 | `subjects.subjectId`, `studentscholarships.studentScholarshipId`, `transferacademicrecords.transferRecordId`, `workflowsteps.workflowStepId` → AUTO_INCREMENT (FK constraints around `subjects`/`transferacademicrecords` dropped and re-added) | Manual-PK tables converted so every Eloquent model can use default auto-increment behavior |
 | Aug 2026 | `payments.paymentDate` → `datetime` | Audit precision for payment timestamps |
 | Aug 2026 | Added RBAC tables: `roles`, `permissions`, `role_permissions`, `staff_roles` | Replaces reliance on the `staffusers.role` enum; a staff member can hold multiple roles |
 | Aug 2026 | Added `auditlogs`, `notifications`, `enrollmentstatushistory`, `settings` | Audit trail, in-app notifications, state-machine history, system settings |
